@@ -1,0 +1,576 @@
+---
+title: "DS 705 Final Project Part 3"
+author: "Hassan Aluraibi"
+date: "07/21/2020"
+output: word_document
+fontsize: 12pt
+---
+Dear Bank Management,
+
+Over the last 3 months we conducted an extensive analysis of your current loan qualifying process, which is the go/no-go metric your organization uses to determine whether or not a prospective applicant, qualifies for a loan. Our goal was to use data your organization already collects today, to develop a model which identifies the applicants who are most likely to pay back their loans in full. 
+
+The methods of analysis included feature engineering and tests for significance, leaning towards a model that was simpler, but could explain findings succinctly. A True/False Modelling Technique (binomial logistic regression) was selected to characterize loan applicants as good/bad, and supplementary analyses were conducted to optimize the model for sensitivity and specificity. 
+
+As such our preliminary findings indicate that our model can improve profits by *$150,216*. Beyond that, if the bank were to *only* accept applicants that our model predicts as *Good*, stands to *increase your overall profits by nearly 2x*. However, we caution on this approach as our model still requires some fine tuning before we can ensure its effectiveness.
+
+Therefore, our recommendations for the next phase would be as follows:
+
+* Conduct a group review and discuss the model findings with your finance, accounting and associated teams
+* Proof of concept milestones, with comparative results to determine model performance (previous applicants vs. new incoming applicants)
+
+We encourage a rigorous evaluation of the model, and a preliminary pilot-period (under supervision) for a period of 6 months. This will help our team to evaluate some of the initial assumptions made to arrive at our conclusions.
+
+Lastly, we appreciate your transparency in sharing this confidential applicant information, allowing us to provide you with the analysis and findings below. We believe we applied stringent ethical considerations in the development of our model, and also omitted features that we felt were biased (such as: state of residence, public records). We look forward to continuing the discussion on ethical considerations with regards to this matter, and are open to modifying our work as you see fit here.
+
+Best wishes, Hassan Aluraibi
+
+
+My final project for DS705 is to analyze a 50K observation dataset from a bank. The goal is to help the bank develop a logistic regression model to identify which loan applicants are likely to default, or pay back their loan, based on a variety of features/variables. 
+
+This analysis will require me to conduct an entire data science process flow which includes
+
+## PART 1
+*	Preparing and Cleaning the Data
+*	Exploring and Transforming the Data
+
+## PART 2
+*	Logistic model creation
+*	Optimizing the threshold for accuracy
+*	Optimizing the threshold for profit
+*	Summarizing results
+
+## PART 3
+*	Final report delivery
+
+### Load Libraries
+Several libraries were loaded including tidyVerse, caret,rephase2,ROCR among others. For full library list please view RMD.
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(readr)
+library(tidyr)
+library(dplyr)
+library(ggpubr)
+library(reshape2)
+library(VIM)
+library(psych)
+library(caret)
+library(Hmisc)
+library(mice)
+library(leaps)
+library(HH)
+library(car)
+library(lmtest)
+library(pscl)
+library(ResourceSelection)
+library(InformationValue)
+library(ROCR)
+library(sjPlot)
+library(sjmisc)
+library(plotROC)
+library(reshape2)
+library(margins)
+```
+
+## PART 1 
+### Preparing and Cleaning the Data
+To begin, I analyzed the dataset and created a new categorical variable, based on the status variable, called **response**. The **response** variable will be used to validate my logistic regression model. 
+To do so, I converted the **status** variable by taking values that were *Default* or *Charged Off*, and classified them as *Bad*, and values that were *Fully Paid* as *Good*. Therefore, my **response** variable consists only of 2 values, *Good* and *Bad*. 
+
+```{r}
+dataSet <- read.csv("loans50k.csv")
+dataSet <- dataSet %>%  mutate(responseVariable = case_when(
+    status == "Default" | status == "Charged Off" ~ "Bad",
+    status == "Fully Paid" ~ "Good",
+))
+```
+
+I also dropped observations that were missing a **response** value, since my logistic regression model depends on a **status**/**response** value for validation, and I thought it ineffective to model without this value.
+
+```{r} 
+dataSet <- dataSet[!is.na(dataSet$responseVariable),] 
+```
+
+Afterwards, I sifted through the dataset and identified variables that I thought were not relevant to creating my model and for prediction. These include
+*	**Employment**  | I dropped this variable because the data was quite messy
+*	**Length**		  | I dropped this variable because it was also messy
+*	**Status**		  | Since this value was used to generate the predictor, so I thought it unfair to include in my analysis. Kind of like having the answers to a test eforehand
+*	**Reason**		  | Also quite messy, and difficult to categorize properly
+*	**State**		    | I thought it unethical to judge people based on their state of residence
+*	**Total Paid**	| As advised in our class notes, this is not to be used as a predictor
+
+```{r}
+dataSetFeatureSelection <- dataSet %>% dplyr::select(-c(loanID, employment, length, status, reason, state, totalPaid))
+```
+
+Then, I needed to do some feature engineering. In particular, I identified a need to do feature engineering on the **verified** variable. I believe there is a redundancy for the values of *Source Verified* and *Verified*, so I converted them programmatically. The **verified** now consisted of only 2 values, *Verified*/*Not Verified*
+
+```{r, message=FALSE, eval = FALSE}
+unique(dataSetFeatureSelection$verified)
+
+dataSetFeatureSelection <- dataSetFeatureSelection %>%  mutate(verified = case_when(
+    verified == "Source Verified" ~ "Verified",
+    verified == "Verified" ~ "Verified",
+    verified == "Not Verified" ~ "Not Verified"
+))
+```
+
+I converted several variables into type factor for use in further analysis including: **status**, **response**, **term**, **grade**, **home**, **verified**)
+```{r}
+dataSetFeatureSelection$verified <- as.factor(dataSetFeatureSelection$verified)
+dataSet$status <- as.factor(dataSet$status)
+dataSet$responseVariable <- as.factor(dataSet$responseVariable)
+dataSet$term <- as.factor(dataSet$term)
+dataSet$grade <- as.factor(dataSet$grade)
+dataSet$home <- as.factor(dataSet$home)
+```
+
+Afterwards, I began addressing issues of missing and incomplete data, and used a few approaches.
+
+Firstly, I used *sapply* to iterate a function overtop of my data set (named **dataSetFeatureSelection**) to identify how many NAs were in my data set, where I generated the table below. 
+
+```{r}
+sapply(dataSetFeatureSelection, function(x) sum(is.na(x))) 
+```
+
+I also ran a function to identify the max number of missing values per observation, with a result of 11.54% (or 3 values missing on a single observation)
+```{r, eval=FALSE}
+whichRowsAreFalse <- as.data.frame(complete.cases(dataSetFeatureSelection))
+whichRowsAreFalse <- which(whichRowsAreFalse == "FALSE")
+
+pMiss <- function(x){
+  sum(is.na(x))/length(x)*100
+  }
+percentOfValuesMissingPerObservation <- apply(dataSetFeatureSelection[whichRowsAreFalse,],1,pMiss)
+max(percentOfValuesMissingPerObservation)
+```
+
+I conducted a summary analysis of the three variables with NAs to identify their mean values, and used this as a reference to choose my preferred MICE imputation.
+```{r, eval = FALSE, echo = TRUE}
+revolRatioSummary <- summary(dataSetFeatureSelection$revolRatio)
+bcOpenSummary <- summary(dataSetFeatureSelection$bcOpen)
+bcRatioSummary <- summary(dataSetFeatureSelection$bcRatio)
+my_imp <- mice(dataSetFeatureSelection, m = 5, maxit = 5, method = "cart")
+mean(my_imp$imp$revolRatio)
+mean(my_imp$imp$bcOpen)
+mean(my_imp$imp$bcRatio)
+imputedFinalDS <- complete(my_imp,5)
+```
+
+For example, if the true mean of **bcRatio** was 0.7, then I would choose the imputation that was closest to 0.7 (and accordingly for other categorical variables). 
+```{r, eval=FALSE, echo=FALSE}
+for (i in 1:my_imp$iteration){
+  meanOfVectorOfImputedRevolRatio <- c(meanOfVectorOfImputedRevolRatio,     mean(my_imp$imp$revolRatio[,i]))
+  meanOfVectorOfImputedBCOpen <- c(meanOfVectorOfImputedBCOpen, mean(my_imp$imp$bcOpen[,i]))
+  meanOfVectorOfImputedBCRatio <- c(meanOfVectorOfImputedBCRatio, mean(my_imp$imp$bcRatio[,i]))
+}
+bestFitForRevolRatio <- which.min(abs(revolRatioSummary[4] - meanOfVectorOfImputedRevolRatio))
+bestFitForBCRatio <- which.min(abs(bcRatioSummary[4] - meanOfVectorOfImputedBCRatio))
+bestFitForBCOpen <- which.min(abs(revolRatioSummary[4] - meanOfVectorOfImputedBCOpen))
+```
+
+```{r, eval=FALSE, echo=FALSE}
+imputedDS <- complete(my_imp,1)
+write.csv(imputedFinalDS, "imputedDataSet.CSV")
+```
+
+
+```{r, echo=FALSE} 
+dataSetFeatureSelection <- read.csv("imputedDataSet.CSV")
+dataSetFeatureSelection$responseVariable <- as.factor(dataSetFeatureSelection$responseVariable)
+dataSetFeatureSelection$term <- as.factor(dataSetFeatureSelection$term)
+dataSetFeatureSelection$grade <- as.factor(dataSetFeatureSelection$grade)
+dataSetFeatureSelection$home <- as.factor(dataSetFeatureSelection$home)
+dataSetFeatureSelection$verified <- as.factor(dataSetFeatureSelection$verified)
+whichColumnIsAFactor <- lapply(dataSetFeatureSelection, is.factor)
+columnsWhichAreNotFactors <- which(whichColumnIsAFactor == "FALSE")
+columnsWhichAreFactors <- which(whichColumnIsAFactor == "TRUE")
+```
+
+To verify that all variables were imputed, I visualized the chart below. All cells are blue, red cells would indicate an NA.
+```{r, message=FALSE, warning = FALSE, echo=FALSE}
+par(mar=c(1,1,1,1))
+md.pattern(dataSetFeatureSelection, plot = TRUE, rotate.names = TRUE)
+```
+
+After imputing, I am now ready to visualize each variable’s distribution, which will allow me to make further decisions (transformations, choosing the appropriate distribution, etc.)
+
+## Exploring and Transforming the Data
+
+To begin exploring my data set, I felt it important to visualize each variables distribution allowing me to:
+*	Identify relationships between the variables’ distribution, and standard distributions
+*	Visualize skewness, to prepare for transformation, and identify outliers
+
+```{r, message=FALSE, warning = FALSE}
+whichVariablesHaveOutliers <- c(8,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26)
+meltedDFForHist <- reshape2::melt(dataSetFeatureSelection[,columnsWhichAreNotFactors])
+
+ggplot(meltedDFForHist,aes(x = value)) + 
+    facet_wrap(~variable,scales = "free") + 
+    geom_histogram()
+
+```
+I summarize my findings below:
+
+*	**debtIncRat** is roughly normally distributed
+*	Two variables are questionable and evaluated using ShapiroWilks
+```{r, echo = FALSE}
+ShapiroTestTotalAcc <- shapiro.test(dataSetFeatureSelection$totalAcc[1:4999])
+ShapiroTestRevolRatio <- shapiro.test(dataSetFeatureSelection$revolRatio[1:4999])
+
+print(paste0("The P Value of the Shapiro Test for Total Acc is: ", round(ShapiroTestTotalAcc$p.value,3) , " and the p value for Revol Ratio is: ", round(ShapiroTestRevolRatio$p.value, 3))) 
+```
+* Based on the results above, both of **TotalAcc** and **RevolRatio** are not normally distributed
+*	Several variables are right skewed, so I decided to transform these variables using a log function
+
+Frequencies of observations appear to be either:
+
+* *normally* distributed (such as **income**, after transformation)
+* *right skewed* (such as **delinq2yr**)
+* *bimodal* distributed (such as **totalBal**)
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+rightSkewedVariables <- c("income", "delinq2yr", "inq6mth","openAcc", "pubRec","totalBal","totalRevLim","avgBal","bcOpen","totalLim","totalBcLim", "totalIlLim")
+
+meltedDFForHistTransformed <- reshape2::melt(dataSetFeatureSelection[rightSkewedVariables])
+ggplot(meltedDFForHistTransformed,aes(x = log(value))) + 
+    facet_wrap(~variable,scales = "free") + 
+    geom_histogram(binwidth = 0.2)
+```
+I ran a summary function over all factor variables, as I am not concerned about their distributions as they are categorical, but rather the proportion of values. As a sanity check, I verified that all their counts indicate at least 5 observations per category, so there is no need to consolidate any categories
+```{r, echo=FALSE, include=FALSE}
+lapply(dataSetFeatureSelection[columnsWhichAreFactors], summary)
+```
+
+Several variables have outliers, as seen with the corresponding boxplots below
+
+```{r, message=FALSE}
+meltedDFForBoxPlot <- reshape2::melt(dataSetFeatureSelection[whichVariablesHaveOutliers])
+ggplot(meltedDFForBoxPlot,aes(x = value)) + 
+    facet_wrap(~variable,scales = "free") + 
+    geom_boxplot()
+```
+
+Outside of the 3 variables mentioned below, I deemed all other variable outliers, to be acceptable for our exercise for one (or more) of the following reasons.
+
+*	Although the units are not standardized across all variables, outliers in green are generally not isolated, and have a trail of following outlier observations. 
+*	Range of values is quite small (e.g. pubRec) so outliers may be more common
+*	I lack a lot of context for these outliers, and am not confident that based on this sample, that if I were to resample, that these outliers would not appear more frequently (potentially). So without good reason, I prefer to leave these perceived outliers in.
+
+For **TotalBCLim**, **TotalllLim**, and **Income**, I decided to substitute their most extreme outlier value, with the closest in value outlier. I believe this will help me reduce the impact of these exceptional outliers when conducting my logistic regression.
+```{r, echo=FALSE, eval=FALSE, echo=FALSE}
+slice_max(dataSetFeatureSelection, n = 2, order_by = dataSetFeatureSelection$income) #look up row # of value
+dataSetFeatureSelection[29188,]$income <- dataSetFeatureSelection[26007,]$income #assign value by row number
+slice_max(dataSetFeatureSelection, n = 2, order_by = dataSetFeatureSelection$totalBcLim)
+dataSetFeatureSelection[31726,]$totalBcLim <- dataSetFeatureSelection[15584,]$totalBcLim
+slice_max(dataSetFeatureSelection, n = 2, order_by = dataSetFeatureSelection$totalIlLim)
+dataSetFeatureSelection[32868,]$totalIlLim <- dataSetFeatureSelection[31674,]$totalIlLim
+```
+
+Now that my dataset has been cleaned and imputed, I'll perform a little bit of exploratory analysis using 2 visualizations
+
+**Boxplot of Response vs All Other Variables**
+
+I evaluated all of my numerical variables against our dependent variable (**response**), and generated a variety of boxplots to identify trends between quantiles, medians, and outliers based on Good/Bad observations
+```{r}
+responseVariableComparisonDF <- dataSetFeatureSelection %>% 
+  dplyr::select(2,4,5,8,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27) %>% 
+  gather(key = "variables", value = "measures", -responseVariable)
+
+responseVariableComparisonDF %>% 
+  ggplot(mapping = aes(x = responseVariable, y = measures, fill = variables)) +
+  geom_boxplot(show.legend = FALSE) +
+  facet_wrap(. ~ variables, scales = "free_y") +
+  labs(title = "Boxplots of Response vs All Other variables")
+```
+
+I can infer the following from the box plots above, and will build off of these when I conduct my analysis in part 2 of this project.
+
+* **rate**, **amount**, **debtIncRat**, **totalBcLim**, **bcRatio** all appear to have IQRs that differ based on the **response**
+* **income** value is difficult to interpret due to range of values (will need further visualization). However, it appears *good* respondents have a higher income on average
+
+I also generated a correlation matrix, which allowed me to visualize relationships between predictors.
+
+```{r}
+cormat <- reshape2::melt(round(cor(dataSetFeatureSelection[columnsWhichAreNotFactors]),2))
+ggplot(data = cormat, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(colour = "white") + 
+  geom_text(aes(label = round(value, 1)),colour = "green", position = position_dodge(width = 0.3),size = 3) +
+  theme(axis.text.x = element_text(size = 10, angle = 45, hjust = 1))
+```
+
+At a high level, there does appear to be correlation among the following pairs:
+
+* **Total Bal** and *Total Lim** are highly correlated so I will drop **Total Lim** 
+* **TotalILim** and *Total RevBal** are highly correlated so I will drop **TotalILim** 
+* **Amount** and **Payment** are highly correlated, so I will create two "experiments" around these variables, and use a ratio. 
+
+I am creating 2 datasets to evaluate for following tests of significance.
+
+* **Dataset Experiment 1** | Amount only, drop payment
+* **Dataset Experiment 2** | Amount / (Payment x # of terms (in months))
+
+```{r, include=FALSE}
+dataSetFeatureSelection <-
+  dataSetFeatureSelection %>%
+  mutate(responseVariable = case_when(
+    responseVariable == "Bad" ~ 0,
+    responseVariable == "Good" ~ 1,
+    TRUE ~ 1)) %>%
+  mutate(home = case_when(
+    home == "RENT" ~ 0,
+    home == "MORTGAGE" ~ 1,
+    home == "OWN" ~ 2,
+    TRUE ~ 1)) %>%
+  mutate(verified = case_when(
+    verified == "Not Verified" ~ 0,
+    verified == "Verified" ~ 1,
+    TRUE ~ 1)) %>%
+  mutate(responseVariable = as.factor(responseVariable))
+```
+
+```{r}
+dataSetFeatureSelectionExperiment1 <- dataSetFeatureSelection %>% dplyr::select(!c(X,totalLim, payment, totalIlLim))
+dataSetFeatureSelectionExperiment2 <- dataSetFeatureSelection %>%
+    mutate(PaymentAmountRatio = amount/(payment * as.numeric(gsub("\\D", "", term)))) %>%
+      dplyr::select(-c(X, totalLim, totalIlLim))
+```
+
+My feature engineering is complete, and I have 2 datasets to evaluate for model creation. 
+
+## PART 2
+### Logistic Model creation!
+
+**4** models will be created to evaluate the effect of interaction and non-interaction terms
+
+```{r}
+logisticModelObject1NoInteractions <- glm(responseVariable~., data=dataSetFeatureSelectionExperiment1, family = "binomial")
+logisticModelObject1Interactions   <- glm(responseVariable~.^2, data=dataSetFeatureSelectionExperiment1, family = "binomial")
+logisticModelObject2NoInteractions <- glm(responseVariable~., data=dataSetFeatureSelectionExperiment2, family = "binomial")
+logisticModelObject2Interactions   <- glm(responseVariable~.^2, data=dataSetFeatureSelectionExperiment2, family = "binomial")
+```
+
+Firstly, I will take the best performing models from the pairs of Model 1 and Model 2, based on their **AIC** scores from the summary results below. 
+* **For both models, the 1st order interaction terms had the better AIC scores**  
+
+```{r, echo=FALSE}
+model1SummaryResults2ndOrderInteractions <- summary(logisticModelObject1Interactions)
+model1SummaryResults1stOrderInteractions <- summary(logisticModelObject1NoInteractions)
+
+model2SummaryResults2ndOrderInteractions <- summary(logisticModelObject2Interactions)
+model2SummaryResults1stOrderInteractions <- summary(logisticModelObject2NoInteractions)
+
+print(paste0("Model 1's AIC score is: ", round(model1SummaryResults1stOrderInteractions$aic, 3), " and Model 2's AIC score is: ", round(model2SummaryResults1stOrderInteractions$aic, 3)))
+```
+
+The 2 models that I will evaluate further are:
+* **Model 1** (all predictors)     | *1st order interactions*
+* **Model 2** (subset predictors)  | *1st order interactions*
+
+I conducted two quick statistical analyses to validate the statistical significance of my predictor variables:
+
+* **Summary Statistic**: The *pValue* indicates which variables are statistically significant (not due to chance).
+* **Confidence Interval**: If a CI passes through a value of **0**, drop that predictor.
+
+The results for both tests indicated that the same variables need to be dropped due to lack of statistical significance.
+The variables to be dropped include: **income**, **pubRec**, **totalRevBal**, **totalRevLim**, **avgBal**, **bcOpen**, **bcRatio**, **totalBcLim**
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include = FALSE}
+model1SummaryResults1stOrderInteractions
+model1SummaryResults2ndOrderInteractions
+model2SummaryResults1stOrderInteractions
+model2SummaryResults2ndOrderInteractions
+```
+
+```{r echo=FALSE, message=FALSE, include = FALSE}
+confidenceInterval <- exp(confint(logisticModelObject1NoInteractions))
+confidenceInterval2 <- exp(confint(logisticModelObject2NoInteractions))
+confidenceInterval
+confidenceInterval2
+```
+
+```{r, echo=FALSE}
+dataSetFeatureSelectionExperiment2 <-
+  dataSetFeatureSelectionExperiment2 %>%
+  dplyr::select(-c(income, pubRec, totalRevBal, totalRevLim, avgBal, bcOpen, bcRatio, totalBcLim))
+```
+
+```{r, echo=FALSE}
+logisticModelObject2NoInteractions <- glm(responseVariable~., data=dataSetFeatureSelectionExperiment2, family = "binomial")
+```
+
+Continuing the model evaluations, I ran 2 models with forward stepping to evaluate their AIC scores. 
+
+```{r, echo=FALSE, warning=FALSE, message = FALSE, include=FALSE}
+modelNull1 <- glm(responseVariable~1, data=dataSetFeatureSelectionExperiment1, family = "binomial")
+resultsAICStepModel1 <- step(modelNull1,scope = list(lower=modelNull1, upper = logisticModelObject1NoInteractions), direction = "forward")
+
+modelNull2 <- glm(responseVariable~1, data=dataSetFeatureSelectionExperiment2, family = "binomial")
+resultsAICStepModel2 <- step(modelNull2,scope = list(lower=modelNull2, upper = logisticModelObject2NoInteractions), direction = "forward")
+```
+
+```{r,echo=FALSE}
+aic1 <- extractAIC(logisticModelObject1NoInteractions)
+aic2 <- extractAIC(logisticModelObject2NoInteractions)
+
+print(paste0("The AIC of our more complex Model 1 is: ", ceiling(aic1[2]), "The AIC of our simplified Model 2 is: ",ceiling(aic2[2])))
+```
+
+It is evident to me that even by a small AIC difference, *the predictors that were dropped from our model reduce model complexity, while explaining our data just as well as a more complex model*. 
+
+Our feature engineering did improve our model's performance and the less complex AIC model (*Logistic Model 2*)  performs better. I will use **Experiment 2's Dataset**
+
+I also conducted a few tests of significance with the following findings
+
+* **McFadden's R Squared**, no significant difference in results between both experiment datasets. (stack overflow reference on test results found [here](https://stats.stackexchange.com/questions/82105/mcfaddens-pseudo-r2-interpretation))
+* **Hoslem Test** indicates that the model is not a good fit for the data, which means that the expected proportions of the dataset do not match the results. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include = FALSE}
+r1 <- pR2(logisticModelObject1NoInteractions)
+r2 <- pR2(logisticModelObject2NoInteractions)
+```
+
+```{r, message= FALSE, echo=FALSE}
+hoslemtest1 <- hoslem.test(dataSetFeatureSelectionExperiment1$responseVariable, logisticModelObject1NoInteractions$fitted.values, g = 5)
+
+hoslemtest2 <- hoslem.test(dataSetFeatureSelectionExperiment2$responseVariable, logisticModelObject2NoInteractions$fitted.values, g = 5)
+
+print(paste0("The Pseudo R-Squared Value for Model 1 is: ", round(r1[4],5), " and for Model 2 it's: ", round(r2[4],5)))
+print(paste0("The Hoslem Test P Value for Model 1 is: ", hoslemtest1$p.value, " and for Model 2 it's: ", hoslemtest2$p.value))
+```
+
+The above tests were exploratory, but ultimately inconclusive. Therefore, I have finalized my model and would like to select **experiment 2's** dataset for training due to its AIC score and parsimonious performance.
+
+```{r, echo=FALSE}
+finalDataSetForTraining <- cbind(dataSetFeatureSelectionExperiment2, dataSet$totalPaid)
+```
+
+I split the dataset into 2 portions (80/20), and set a seed for consistent results. Two steps will take place in the following functions
+
+```{r}
+set.seed(444)
+trainingFinal <- createDataPartition(finalDataSetForTraining$responseVariable, p=0.8, list = FALSE, times = 1)
+
+logisticModelTrainingDataSet <- finalDataSetForTraining[trainingFinal,]
+logisticModelTestDataSet <- finalDataSetForTraining[-trainingFinal,]
+
+logisticModelTrainingDataSet2 <- logisticModelTrainingDataSet[,-18]
+logisticModelTestDataSet2 <- logisticModelTestDataSet[,-18]
+
+finalModel <- glm(responseVariable~.,data=logisticModelTrainingDataSet2, family = "binomial")
+```
+
+I leveraged the *margins* package, to identify any exploratory (predictor variables) that exhibit a significant change  to the dependent variable, when all other predictors are set to a constant value (0). 
+
+```{r,echo=FALSE, warning=FALSE,}
+marginalEffectsAverage <- margins(finalModel)
+summaryMEA <- summary(marginalEffectsAverage)
+ggplot(data = summaryMEA, aes(x = factor, y = AME)) +
+  geom_point() +
+  theme(axis.text.x = element_text(face="italic", color = "#993333", size = 10, angle = 90)) +
+  geom_errorbar(aes(ymax=lower, ymin = upper)) +
+  xlab("Predictors") +
+  ylab("Average Marginal Effect") +
+  ggtitle("Average Marginal Effect Plot with Confidence Intervals (95%)")
+
+```
+
+These results indicate a significant change in the dependent variable (**response**) against the **PaymentAmountRatio** and **rate** variables. This indicates that these predictors have a a significant impact on the dependent variable outcome (negatively in both cases)
+
+Now, we will test the model we just created called **finalModel** against our **testDataSet**. I used the ROCR package
+```{r}
+predictionResults <- predict(finalModel,logisticModelTestDataSet2, type = "response") 
+pred <- ROCR::prediction(predictionResults, logisticModelTestDataSet2$responseVariable)
+perf <- performance(pred, measure = "tpr",x.measure = "fpr")
+plotROC(logisticModelTestDataSet2$responseVariable,predictionResults)
+```
+
+This indicates a somewhat logarithmic relationship between *TPR* and *FPR*, with an automatically suggested AUROC of *0.7086*. Specificity and sensitivity is highest at a value of *0.7086*, and that is the value we will use as a threshold.
+```{r, echo=FALSE, message = FALSE,include=FALSE}
+auc <- 0.7086
+predictionResultsFiltered <- as.factor(ifelse(predictionResults > 0.5,1,0))
+predictionResultsFilteredAUC <- as.factor(ifelse(predictionResults > auc,1,0))
+originalThreshold <- caret::confusionMatrix(predictionResultsFiltered,reference = logisticModelTestDataSet2$responseVariable)
+suggestedThresholdAUC <- caret::confusionMatrix(predictionResultsFilteredAUC,reference = logisticModelTestDataSet2$responseVariable)
+```
+
+### Maximizing for profit
+
+Now we need to identify the AUC with the highest total profit. I sum up all predictors that are good and subtract from bad, the results are below:
+```{r, echo = FALSE, warning=FALSE }
+profitDataSet<- cbind(logisticModelTestDataSet, predictionResultsFilteredAUC)
+
+originalProfit <- sum(profitDataSet$`dataSet$totalPaid`) - sum(profitDataSet$amount)
+originalProfit
+
+newProfit <- 
+  profitDataSet %>%
+    filter(predictionResultsFilteredAUC == 1)
+
+onlyGoodLoansProfit <- sum(newProfit$`dataSet$totalPaid`) - sum(newProfit$amount)
+
+profitsEarned <- melt(data.frame(originalProfit, onlyGoodLoansProfit))
+
+ggplot(profitsEarned, aes(x = variable, y = value, fill = variable)) +
+  geom_col() +
+  xlab("Profit Differences") +
+  ylab("profit in dollars") +
+  ggtitle("Good & Bad Profit vs Only Good Profit")
+
+print(paste0("The total profit without our model is: $", round(originalProfit,2), " and the total profit with our model (only good loans) is: $", round(onlyGoodLoansProfit,2)))
+```
+
+Based on the above plot,  profit is exceptionally high when *only* considering good loan applicants. The profit is >2x with only good loans.
+
+```{r, echo=FALSE, warning=FALSE,include = FALSE}
+aucCounter <-  0
+bestAUC <- 0
+largestThreshold <- 0
+while (aucCounter < 1)
+{
+  predictionResultsAUCCounter <- as.factor(ifelse(predictionResults > aucCounter,1,0))
+  threshold <- sum(logisticModelTestDataSet$`dataSet$totalPaid`) - sum(logisticModelTestDataSet$amount)
+  Threshold <- caret::confusionMatrix(predictionResultsAUCCounter,reference = logisticModelTestDataSet2$responseVariable)
+  CurrentThreshold <- Threshold$byClass[1] + Threshold$byClass[2]
+  if
+    (CurrentThreshold > largestThreshold) {
+    bestAUC <- aucCounter
+    largestThreshold <- CurrentThreshold
+  } 
+  else
+    largestThreshold = largestThreshold
+  
+  aucCounter <- aucCounter + 0.01
+}
+```
+
+Wrote a looping function to evaluate the optimal AUC value to maximize profit
+
+```{r,echo=FALSE, warning = FALSE}
+aucCounter <-  0
+aucMax <- 0
+currentMaxProfit <- 0
+while (aucCounter < 1)
+{
+  predictionResultsAUCCounter <- as.factor(ifelse(predictionResults > aucCounter,1,0))
+  testingDataSet <- cbind(logisticModelTestDataSet, predictionResultsAUCCounter)
+  testingDataSet <-
+    testingDataSet %>%
+      filter(predictionResultsAUCCounter == 1)
+  
+  currentProfit <- sum(testingDataSet$`dataSet$totalPaid`) - sum(testingDataSet$amount)
+  if(currentProfit > currentMaxProfit){
+    currentMaxProfit <- currentProfit
+    aucMax <- aucCounter
+  }
+  aucCounter <- aucCounter + 0.01
+}
+
+```
+
+```{r, echo=FALSE}
+print(paste0("The highest profit is $", ceiling(currentMaxProfit), " and it is calculated at an AUC of ", aucMax, ". Compared to an outcome with only Good Loans, we have improved by over $", ceiling(currentMaxProfit) - ceiling(onlyGoodLoansProfit)))
+```
+
+Based on all of these findings, it is interesting to note that the ideal AUC in one scenario (based on the response variable), may actually differ based on the variable of interest (the total profit in this case).
+
+Therefore, aiming for profit, we can increase it by >*$150000* using our model. 
+```
