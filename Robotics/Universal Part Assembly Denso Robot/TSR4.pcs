@@ -1,0 +1,13 @@
+#include "globals.h"
+#include "CmdUtil.pcs"
+#include "RobotScrew.pcs"
+'!TITLE "Denso robot program"
+
+Sub Main
+Zone2A_Request = ""
+Zone2B_Request = ""
+Zone3_Request = ""
+	WHILE TRUE
+		Call ZoneMonitor()
+	WEND
+End Sub

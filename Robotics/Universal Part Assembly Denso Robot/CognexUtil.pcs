@@ -1,0 +1,214 @@
+#include "globals.h"
+#include "DIO_TAB.h"
+#include "Contec_IO.pcs"
+'!TITLE "Denso robot program"
+
+Sub Main
+Dim strResult As String
+	Takearm Keep = 0
+	'Testing
+	'strResult = Func_Take_Image(VISCMD_W4Fid1)
+	'strResult = Func_Take_Image(VISCMD_W4Fid2)
+
+	S[64] = strResult
+End Sub
+
+Function Func_Take_Image(FidNumber As Integer) As String
+Dim res As Integer
+Dim strResult As String
+Dim vantResult As Variant
+Dim strCmd As String
+Dim strResp As String
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Resp As Object 'Respond
+Dim m_Value As Object
+Dim m_ValueX As Object	' CaoVariable Object
+Dim m_ValueY As Object	' CaoVariable Object
+Dim strValueCell_X As String
+Dim strValueCell_Y As String
+Dim zeroFidNumber As Integer
+Dim X_Comp As String
+Dim Y_Comp As String
+    zeroFidNumber = 0
+
+	strResult = ""
+	m_Ctrl = cao.AddController("Insight", "caoProv.Cognex.In-Sight", "", "conn=eth:192.168.0.5")
+	' Sets the In-Sight sensor Offline
+	m_Ctrl.SetOnline 0
+
+	' Load job
+'	m_Ctrl.Execute "LoadFile", "Candlestick.job"
+
+	' Sets the In-Sight sensor Online
+'	m_Ctrl.Execute "SetOnline" , 1
+
+	' Acquire and image and update the spreadsheet. 
+	'strResult = m_Ctrl.SendMessageAndWait
+
+	'Add Cell Variables
+	m_Resp = m_Ctrl.AddVariable("RespCell", "Cell=I006")
+
+	'get vision fiducial command
+    Select Case FidNumber
+	Case VISCMD_W1Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W1Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W1Fid1_Y)
+	Case VISCMD_W1Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W1Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W1Fid2_Y)
+	Case VISCMD_W2Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W2Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W2Fid1_Y)
+	Case VISCMD_W2Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W2Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W2Fid2_Y)
+	Case VISCMD_W3Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W3Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W3Fid1_Y)
+	Case VISCMD_W3Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W3Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W3Fid2_Y)
+	Case VISCMD_W4Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W4Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W4Fid1_Y)
+	Case VISCMD_W4Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W4Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W4Fid2_Y)
+	Case VISCMD_W5Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W5Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W5Fid1_Y)
+	Case VISCMD_W5Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W5Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W5Fid2_Y)
+	Case VISCMD_W6Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W6Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W6Fid1_Y)
+	Case VISCMD_W6Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W6Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W6Fid2_Y)
+	Case VISCMD_W7Fid1
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W7Fid1_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W7Fid1_Y)
+	Case VISCMD_W7Fid2
+		m_ValueX = m_Ctrl.AddVariable("XOffset", STR_VIS_W7Fid2_X)
+		m_ValueY = m_Ctrl.AddVariable("YOffset", STR_VIS_W7Fid2_Y)
+	Case Else
+        Halt
+	End Select
+	strResp = m_Resp.Value
+	'If () Then
+'	End If
+
+'VisCmd_Col is string
+'VisCmd_Row is integer
+    m_Ctrl.Execute "SetInteger", Array(VisCmd_Col,VisCmd_Row,FidNumber)
+
+	' Acquire an image. 
+    m_Ctrl.Execute "SetEvent", 8
+
+	Delay 500 'For now
+	X_Comp = m_ValueX.Value
+	Y_Comp = m_ValueY.Value
+    If (InStr(1,X_Comp,"ERR") == 0) Then
+	     Vision_OffsetX = Val(X_Comp)
+	Else
+		res = ERR_VIS_ERROR
+	End If
+    If (InStr(1,Y_Comp,"ERR") == 0) Then
+	     Vision_OffsetY = Val(Y_Comp)
+	Else
+		res = ERR_VIS_ERROR
+	End If
+
+    m_Ctrl.Execute "SetInteger", Array(VisCmd_Col,VisCmd_Row,zeroFidNumber)
+
+
+'	Do
+'		strResp = m_Resp.Value
+'	   If (strCmd == strResp) Then
+'	      strResult = m_Value.Value
+'		Else
+'			'Check for time out
+'	         'strResult = Cmd_Fail
+'		End If
+'	Until (Len(strResult)>
+	If (res < 0) Then
+   		strResult = Str(res)
+	End If
+	' DisConnect
+'	 m_Ctrl.Variables.Remove m_Value.Index
+	 m_Ctrl.Variables.Remove m_Resp.Index
+	 m_Ctrl.Variables.Remove m_ValueX.Index
+	 m_Ctrl.Variables.Remove m_ValueY.Index
+     cao.Controllers.Remove m_Ctrl.Index
+Func_Take_Image = strResult
+End Function
+
+Function Func_Read_Barcode() As String
+Dim res As Integer
+Dim strResult As String
+Dim vantResult As Variant
+Dim strCmd As String
+Dim strResp As String
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Resp As Object 'Respond
+Dim m_Value As Object
+Dim strValueCell As String
+
+	strResult = ""
+	m_Ctrl = cao.AddController("Insight", "caoProv.Cognex.In-Sight", "", "conn=eth:192.168.0.5")
+	' Sets the In-Sight sensor Offline
+	m_Ctrl.SetOnline 0
+
+	' Load job
+'	m_Ctrl.Execute "LoadFile", "Candlestick.job"
+
+	' Sets the In-Sight sensor Online
+'	m_Ctrl.Execute "SetOnline" , 1
+
+	' Acquire and image and update the spreadsheet. 
+	'strResult = m_Ctrl.SendMessageAndWait
+
+	'Add Cell Variables
+	m_Resp = m_Ctrl.AddVariable("RespCell", "Cell=I006")
+
+	m_Value = m_Ctrl.AddVariable("Barcode", VisBarcode)
+
+	strResp = m_Resp.Value
+	'If () Then
+'	End If
+
+'VisCmd_Col is string
+'VisCmd_Row is integer
+'    m_Ctrl.Execute "SetInteger", Array(VisCmd_Col,VisCmd_Row,FidNumber)
+
+	' Acquire an image. 
+    m_Ctrl.Execute "SetEvent", 8
+
+	Delay 500 'For now
+    If (m_Value.Value <> "#ERR") Then
+	    strResult = m_Value.Value
+	Else
+		res = ERR_VIS_ERROR
+	End If
+
+
+'	Do
+'		strResp = m_Resp.Value
+'	   If (strCmd == strResp) Then
+'	      strResult = m_Value.Value
+'		Else
+'			'Check for time out
+'	         'strResult = Cmd_Fail
+'		End If
+'	Until (Len(strResult)>
+	If (res <> 0) Then
+   		strResult = Str(res)
+	End If
+	' DisConnect
+'	 m_Ctrl.Variables.Remove m_Value.Index
+	 m_Ctrl.Variables.Remove m_Resp.Index
+	 m_Ctrl.Variables.Remove m_Value.Index
+     cao.Controllers.Remove m_Ctrl.Index
+Func_Read_Barcode = strResult
+End Function

@@ -1,0 +1,361 @@
+#include "globals.h"
+#include "DIO_TAB.h"
+#include "Contec_IO.pcs"
+#include "Commands.pcs"
+'!TITLE "Denso robot program"
+
+Sub Main
+
+
+
+End Sub
+
+Sub CmdParse
+DEFSTR strings, string0
+DEFSTR Remaining = ""
+DEFINT res
+S[8] = Command
+S[97] = Command
+
+IF ((LEN(Command) > 0) AND (LEN(CmdHeader) == 0) AND (LEN(Response) == 0)) THEN
+   strings = Command
+
+	'RECVMSG CONTAINS RAW MESSAGE
+	'GETTING 7 VALUES : CmdHeader, par1, par2, par3, par4, par5, par6
+	CmdStatus = ""		
+	string0=LEFT(strings,InStr(1,strings,",")-1)
+	Remaining=MID(strings,InStr(1,strings,",")+1,LEN(strings)-InStr(1,strings,","))
+	CmdPar1=LEFT(Remaining,InStr(1,Remaining,",")-1)
+	Remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+	CmdPar2=LEFT(Remaining,InStr(1,Remaining,",")-1)
+	Remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+	CmdPar3=LEFT(Remaining,InStr(1,Remaining,",")-1)
+	Remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+	CmdPar4=LEFT(Remaining,InStr(1,Remaining,",")-1)
+	Remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+	CmdPar5=LEFT(Remaining,InStr(1,Remaining,",")-1)
+	Remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+	CmdPar6=Remaining
+	If (CmdPar6 = ",") Then
+		CmdPar6 = ""
+	End If
+'	Command = ""
+	CmdHeader = string0	
+	If ((CmdHeader <> Cmd_Set_Output) And (CmdHeader <> Cmd_Get_Inputs) And (CmdHeader <> Cmd_Get_Outputs) And (CmdHeader <> Cmd_Set_TowerLights)) Then
+		Call Log_Commands()
+	End If
+End If
+S[8] = S[8] + ": " + CmdHeader
+
+
+End Sub
+Sub CmdExecute
+DEFINT temp1, temp2
+DEFSTR res, resp
+DEFIO input1 = BYTE,0
+DEFIO input2 = BYTE, 8
+Dim input3 As Integer
+Dim input4 As Integer
+DEFIO output1 = BYTE, 17
+DEFIO output2 = BYTE, 25
+Dim output3 As Integer
+Dim output4 As Integer
+Dim ind As Integer
+Dim resplight As String
+
+res = ""
+'build respond message without final result
+resp = CmdHeader + "," + CmdPar1 + "," + CmdPar2 + "," + CmdPar3 + "," + CmdPar4 + "," + CmdPar5 + "," + CmdPar6
+temp1 = 0
+temp2 = 0
+'Determine command to execute
+	Select Case CmdHeader
+	Case Cmd_Set_Output'Set output
+		temp1 = Val(CmdPar1)
+		I[5] = temp1
+		If ((temp1 > -1)And (temp1 < 32))  Then
+			temp2 = Val(CmdPar2)
+			'Determine state to set
+			Select Case temp2
+			Case 0,1
+				Call IOSetOutput(temp1,temp2)  'Set output
+				res = Cmd_Pass
+			Case Else '
+				res = Str(ERR_INVALID_OUTPUT_STATE)
+			End Select
+		Else
+		    res = Str(ERR_INVALID_OUTPUT)
+		End If
+		Response = resp + "," + res
+		CmdHeader = ""
+		CmdStatus = ""
+		S[7] = Response
+	Case Cmd_Get_Inputs 'Get input states
+	    input3 = IOGetInputs(1) 
+		input4 = IOGetInputs(2) 
+		resp = CmdHeader + "," + Str(input1) + "," + Str(input2) + "," + Str(input3) + "," + Str(input4) + ",," 
+
+		Response = resp + "," + Cmd_Pass
+		S[7] = Response
+		CmdHeader = ""
+		CmdStatus = ""
+
+	Case Cmd_Get_Outputs 'Get output states
+	    output3 = IOGetOutputs(1) 
+		output4 = IOGetOutputs(2) 
+		resp = CmdHeader + "," + Str(output1) + "," + Str(output2) + "," + Str(output3) + "," + Str(output4) + ",," 
+		Response = resp + "," + Cmd_Pass
+		CmdHeader = ""
+	    CmdStatus = ""
+		S[7] = Response
+	Case Cmd_Set_TowerLights
+		resplight = Func_Set_TowerLights
+		resp = CmdHeader + "," + Str(output1) + "," + Str(output2) + "," + Str(output3) + "," + Str(output4) + ",," 
+		Response = resp + "," + resplight
+		CmdHeader = ""
+	    CmdStatus = ""
+		S[7] = Response
+    Case Else 'To be setup for other commands.
+         'This is being handled by the CmdRobot
+		 If (Len(CmdHeader) > 0) Then
+		    CurCmdStatus=""
+			CurCmdPar1 = CmdPar1
+			CurCmdPar2 = CmdPar2
+			CurCmdPar3 = CmdPar3
+			CurCmdPar4 = CmdPar4
+			CurCmdPar5 = CmdPar5
+			CurCmdPar6 = CmdPar6
+			CurCmdHeader = CmdHeader
+			CmdHeader = ""
+			CmdPar1 = ""
+			CmdPar2 = ""
+			CmdPar3 = ""
+			CmdPar4 = ""
+			CmdPar5 = ""
+			CmdPar6 = ""
+            CmdStatus = ""
+		End If
+        S[9]="Robot command: " + CmdHeader +" rob: "+ CurCmdHeader
+
+	End Select
+	Command = ""	
+End Sub
+
+Sub CmdRobot
+Dim resp As String
+'This sub routine monitors current robot command
+
+	'Check for command complete
+	If ((LEN(CurCmdStatus)<>0) AND (LEN(CurCmdHeader) <> 0) And ((Sysstate And 2048) = 2048)) THEN
+	
+        resp = CurCmdHeader + "," + CurCmdPar1 + "," + CurCmdPar2 + ","+ CurCmdPar3 + ","+ CurCmdPar4 + ","+ CurCmdPar5 + "," + CurCmdPar6 
+		Response = resp + "," + CurCmdStatus
+		S[34] = "Robot Command Response: " + Response
+		CurCmdHeader = ""
+	    CurCmdStatus = ""
+	'	CmdHeader = ""
+	 '   CmdStatus = ""
+	ElseIf ((LEN(CurCmdStatus)<>0) AND (LEN(CurCmdHeader) <> 0) And ((Sysstate And 2048) <> 2048)) THEN
+        resp = CurCmdHeader + "," + CurCmdPar1 + "," + CurCmdPar2 + ","+ CurCmdPar3 + ","+ CurCmdPar4 + ","+ CurCmdPar5 + "," + CurCmdPar6 
+		Response = resp + "," + Str(ERR_NOT_IN_AUTO)
+		S[34] = "Robot Command Response: " + Response
+		CurCmdHeader = ""
+	    CurCmdStatus = ""
+	'	CmdHeader = ""
+	 '   CmdStatus = ""
+	End If
+'	Select Case CmdHeader
+'	Case Cmd_Set_Output, Cmd_Get_Inputs, Cmd_Get_Outputs, Cmd_Set_TowerLights'
+
+'	Case Else
+
+	'Robot command or bad command
+'	    If (Len(CmdHeader) > 0) Then
+ '           CurCmdHeader = CmdHeader
+'			CurCmdPar1 = CmdPar1
+'			CurCmdPar2 = CmdPar2
+'			CurCmdPar3 = CmdPar3
+'			CurCmdPar4 = CmdPar4
+'			CurCmdPar5 = CmdPar5
+'			CurCmdPar6 = CmdPar6
+'			CmdHeader = ""
+'			CmdPar1 = ""
+'			CmdPar2 = ""
+'			CmdPar3 = ""
+'			CmdPar4 = ""
+'			CmdPar5 = ""
+'			CmdPar6 = ""
+'            CmdStatus = ""
+'		End If
+'	End Select
+
+	If (RobotTaskAutoStartEnable <> 0) Then
+       Call CmdRobotTask
+	End If
+End Sub
+
+Sub CmdRecovery
+Dim resp As String
+	'Check for command complete
+	If ((LEN(CurCmdStatus)==0) AND (LEN(CurCmdHeader) <> 0) And ((Sysstate And 2048) <> 2048)) THEN
+        resp = CurCmdHeader + "," + CurCmdPar1 + "," + CurCmdPar2 + ","+ CurCmdPar3 + ","+ CurCmdPar4 + ","+ CurCmdPar5 + "," + CurCmdPar6 
+		Wait (Len(Response) == 0), 1000
+		Response = resp + "," + Str(ERR_NOT_IN_AUTO)
+		S[34] = "Robot Command Response: " + Response
+		CurCmdHeader = ""
+	    CurCmdStatus = ""
+	ElseIf ((LEN(CurCmdStatus)<>0) AND (LEN(CurCmdHeader) <> 0) And ((Sysstate And 2048) <> 2048)) THEN
+        resp = CurCmdHeader + "," + CurCmdPar1 + "," + CurCmdPar2 + ","+ CurCmdPar3 + ","+ CurCmdPar4 + ","+ CurCmdPar5 + "," + CurCmdPar6 
+		Wait (Len(Response) == 0), 1000
+		Response = resp + "," + CurCmdStatus
+		S[34] = "Robot Command Response: " + Response
+		CurCmdHeader = ""
+	    CurCmdStatus = ""
+	ElseIf ((LEN(CurCmdStatus)==0) AND (LEN(CurCmdHeader) <> 0) And ((Sysstate And 4) == 0)) THEN
+		If ((CurCmdHeader <> Cmd_Home) And (CurCmdHeader <> Cmd_Initialize)) Then
+	        resp = CurCmdHeader + "," + CurCmdPar1 + "," + CurCmdPar2 + ","+ CurCmdPar3 + ","+ CurCmdPar4 + ","+ CurCmdPar5 + "," + CurCmdPar6 
+			Wait (Len(Response) == 0), 1000
+			Response = resp + "," + Str(ERR_NO_SERVO_POWER)
+			S[34] = "Robot Command Response: " + Response
+			CurCmdHeader = ""
+		    CurCmdStatus = ""
+		End If
+	End If
+End Sub
+Sub CmdRobotTask
+		'SystemAutoMode = (Sysstate And 16) <> 1  'Auto mode
+        SystemPowerOn = (Sysstate And 4) <> 0    'Servo power is ON
+		RobotTaskStatus = Status(RobotTask)
+		If ((Status(RobotTask) <> TaskStatus_Running) And ((Sysstate And 2048) = 2048)) Then
+			'Start robot task
+			Kill RobotTask
+			Clrerr
+			Delay 200
+			If ((Sysstate And 2048) = 2048) Then
+				Run RobotTask 'program will initialize all variables so it will not execute a previous command.
+			End If
+		End If
+End Sub
+Function Func_GripperID() As Integer
+Dim res As Integer
+res = 0 'Negative is the error code
+'	inToolConnected	10	' Tool Connected
+'	inToolBit1	11	' Tool Bit 1
+'	inToolBit2	12	' Tool Bit 2
+'	inToolBit3	13	' Tool Bit 3
+	res = 0
+	If (IO[inToolBit1]) Then
+    	res = 1
+	End If
+	If (IO[inToolBit2]) Then
+    	res = res + 2
+	End If
+	If (IO[inToolBit3]) Then
+    	res = res + 4
+	End If
+	I[52]=res
+	If (res > 0) Then
+	 	If (IO[inToolConnected]) Then
+		Else
+		    res = ERR_UNEXP_GRIP_STATE
+		End If
+	End If
+    
+	If (RobotGripIDEnable == 0) Then
+	    res = RobotGripSimID
+	End If
+	Func_GripperID = res
+End Function
+
+Sub LightControl
+Dim blink_state As Integer
+
+'Light status: 0 - Off, 1 - Solid, 2 - Blinking
+'TowerLight_Green I6 
+'TowerLight_Yellow I7
+'TowerLight_Red I8
+
+If ((Timer - TowerLight_BlinkingTimer) > TowerLight_BlinkingTime) Then
+	blink_state = 1
+Else
+    blink_state = 0
+End If
+If ((Timer - TowerLight_BlinkingTimer) > (TowerLight_BlinkingTime * 2)) Then
+	TowerLight_BlinkingTimer = Timer
+End If
+
+' outBeaconRed   17
+'	outBeaconYellow	18	' Beacon Red
+'	outBeaconGreen	19	' Beacon Yellow
+Select Case TowerLight_Green
+Case 0' Off
+	ReSet IO[outBeaconGreen]
+Case 1' Solid On
+	Set IO[outBeaconGreen]
+Case 2' Blinking 
+	If (blink_state == 1) Then
+		Set IO[outBeaconGreen]
+	Else
+		ReSet IO[outBeaconGreen]
+	End If
+Case Else
+    TowerLight_Green = 0
+    ReSet IO[outBeaconGreen]
+End Select
+
+Select Case TowerLight_Yellow
+Case 0' Off
+	ReSet IO[outBeaconYellow]
+Case 1' Solid On
+	Set IO[outBeaconYellow]
+Case 2' Blinking 
+	If (blink_state == 1) Then
+		Set IO[outBeaconYellow]
+	Else
+		ReSet IO[outBeaconYellow]
+	End If
+Case Else
+    TowerLight_Yellow = 0
+    ReSet IO[outBeaconYellow]
+End Select
+
+Select Case TowerLight_Red
+Case 0' Off
+	ReSet IO[outBeaconRed]
+Case 1' Solid On
+	Set IO[outBeaconRed]
+Case 2' Blinking 
+	If (blink_state == 1) Then
+		Set IO[outBeaconRed]
+	Else
+		ReSet IO[outBeaconRed]
+	End If
+Case Else
+    TowerLight_Red = 0
+    ReSet IO[outBeaconRed]
+End Select
+
+End Sub
+Sub Log_Commands()
+Dim counter As Integer
+
+For Counter = 78 To 70 Step -1
+' Cmd_Log_Latest S70
+' Cmd_Log_Oldest S79
+    S[counter + 1] = S[counter]
+Next
+Cmd_Log_Latest = Command
+End Sub
+Sub CmdVacMonitor()
+Dim timeout As Float
+timeout = 0
+	If ((Not IO[inToolConnected]) And (Not IO[inToolBit1]) And (Not IO[inToolBit2]) And (Not IO[inToolBit3])) Then
+		timeout = Timer
+		Do
+		 Delay 10
+        Loop Until ((Timer - timeout) > 1000)
+		If (((Not IO[inToolConnected]) And (Not IO[inToolBit1]) And (Not IO[inToolBit2]) And (Not IO[inToolBit3])) Or (Not IO[inGripDummyNVacPres])) Then
+    			Set IO[outGripVacOff]
+		End If
+	End If
+End Sub

@@ -1,0 +1,3634 @@
+#include "globals.h"
+#include "DIO_TAB.h"
+#include "Contec_IO.pcs"
+#include "CmdUtil.pcs"
+#include "RobotUtil.pcs"
+#include "CognexUtil.pcs"
+#include "RobotScrew.pcs"
+'!TITLE "Command Functions"
+
+Sub Main
+'TOOL assignment
+'TOOL 1 - Motherboard
+'TOOL 2 - Dynamic temperary tool
+'TOOL 3 - Camera position
+'TOOL 4 - Cover CPU offset
+'
+' Func_Home() As String
+' Func_Initialize() As String
+'    Func_Return_MB() As String
+'	 Func_Return_CPU_Cover() As String
+'	 Func_Return_CPU() As String
+'	 Func_Return_HeatSinks() As String
+'	 Func_Return_Dimm() As String
+'	 Func_Nest_Recovery() As String
+' Func_Gripper_Change() As String
+' Func_Gripper_Return() As String
+' Func_Move_To_Point() As String
+' Func_Get_Work() As String
+' Func_Pick_Motherboard() As String
+' Func_Hold_Motherboard() As String
+' Func_Release_Motherboard() As String
+' Func_Get_Barcode() As String
+' Func_Set_TowerLights() As String
+' Func_Copy_Product() As String
+'
+Takearm Keep = 0
+End Sub
+Function Func_Set_Product() As String
+Dim res As Integer
+Dim strResult As String
+Dim productName AS String
+
+res = 1 'Negative is the error code
+strResult = ""
+productName = CurCmdPar1
+Select Case productName
+Case Product_P100 'Candlestick
+     Product_Offset = 100
+	 'Integer
+
+	 PosMax = 299
+
+     LOC_NestMotherboard = 102
+     LOC_NestDimm = 107
+     LOC_NestCPUHeatSink = 103
+     LOC_NestDimm = 107
+	 LOC_NestSpare8 = 108
+ 	 LOC_NestMax = 8
+     LOC_ChassisBCR = 120
+     LOC_PickMotherboard = 123
+     LOC_PlaceMotherboard = 124
+     LOC_PickDimmPallet1 = 129
+     LOC_PickDimmPallet2 = 130
+     LOC_PlaceDimm1 = 131
+     LOC_PlaceDimm2 = 132
+     LOC_PlaceDimm3 = 133
+     LOC_PlaceDimm4 = 134
+     LOC_PickCPU1 = 139
+     LOC_PickCPU2 = 140
+     LOC_PlaceCPU1 = 141
+     LOC_PlaceCPU2 = 142
+     LOC_PickHeatSink1 = 143
+     LOC_PickHeatSink2 = 144
+     LOC_PlaceHeatSink1 = 145
+     LOC_PlaceHeatSink2 = 146
+     LOC_PlaceCoverCPU1 = 147
+     LOC_PlaceCoverCPU2 = 148
+	 LOC_Golden_W1 = 201
+	 LOC_Golden_W2 = 202
+	 LOC_Golden_W3 = 203
+	 LOC_Golden_W4 = 204
+	 LOC_Golden_W5 = 205
+	 LOC_Golden_W6 = 206
+	 LOC_Golden_W7 = 207
+
+'Vision Commands
+     VISCMD_W1Fid1 = 19
+	 VISCMD_W1Fid2 = 20
+	 VISCMD_W2Fid1 = 21
+	 VISCMD_W2Fid2 = 22
+	 VISCMD_W3Fid1 = 23
+	 VISCMD_W3Fid2 = 24
+	 VISCMD_W4Fid1 = 25
+	 VISCMD_W4Fid2 = 26
+	 VISCMD_W5Fid1 = 9
+	 VISCMD_W5Fid2 = 9
+	 VISCMD_W6Fid1 = 29
+	 VISCMD_W6Fid2 = 30
+	 VISCMD_W7Fid1 = 11
+	 VISCMD_W7Fid2 = 11
+
+     strResult = Cmd_Pass
+	 VisBarcode = "C180"
+
+	'F variables
+'Tool Changer Parameters
+
+Case Product_P200 'ODM
+     Product_Offset = 0
+	 PosMax = 299
+     LOC_NestMotherboard = 202
+     LOC_NestDimm = 207
+     LOC_NestCPUHeatSink = 203
+
+     res = ERR_INVALID_PRODUCT
+	 strResult = Str(res)
+Case Product_P300
+     Product_Offset = 0
+	 PosMax = 399
+     LOC_NestMotherboard = 302
+     LOC_NestDimm = 307
+     LOC_NestCPUHeatSink = 303
+
+     res = ERR_INVALID_PRODUCT
+	 strResult = Str(res)
+Case Else
+     Product_Offset = 0
+     res = ERR_INVALID_PRODUCT
+	 strResult = Str(res)
+End Select
+Func_Set_Product = strResult
+End Function
+Function Func_Home() As String
+Dim safeLoc As Position
+' state - State machine variable
+' cycling - main loop cycling/stop control variable
+' res - execution result, 1 - Success, res<0 - error
+	DEFINT state = 0, res = 0, cycling = 1
+	DEFSTR resStr = ""
+	DEFSNG dY = 130
+	DEFPOS tempLoc, loc
+	Dim strResult As String
+	Dim curZone As String
+	Dim gotZones(4) As Integer
+	Dim timeout As Integer
+	strResult = Cmd_Pass
+
+	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+    MOTOR ON
+	ExtSpeed PendantSpeed
+    curZone = Func_Current_Zone
+	Select Case curZone
+	Case Zone_B
+       safeLoc = J2P(J[LOCJ_Home_AreaB])
+	Case Zone_C
+       safeLoc = J2P(J[LOCJ_Home_AreaB])
+	   strResult = Str(ERR_NOT_SAFE_TO_MOVE)
+	   'Need smart error recovery to get out of nest area
+	Case Zone_2
+       safeLoc = J2P(J[LOCJ_Home_Area2])
+	Case Zone_3
+       safeLoc = J2P(J[LOCJ_Home_AreaB])
+	End Select
+	If (strResult == Cmd_Pass) Then
+		strResult = Motion_Complete_Distance(10,20000)
+		strResult = Cmd_Pass
+		If (Dist(DestPos,J2P(J[LOCJ_Home_AreaB]))> 5)  Then
+			loc = CurPos
+			LetZ loc = PosZ(safeLoc)
+			Move L, @P loc, Next
+			strResult = Func_Move_To_Zone(Zone_B)
+			If (strResult == Zone_B) Then
+				strResult = Cmd_Pass
+	        End If
+		End If
+		gotZones(1) = 0
+		gotZones(2) = 0
+		gotZones(3) = 0
+		timeout = Timer
+	End If
+	If (strResult == Cmd_Pass) Then
+				If (Sim_Zone_Control==0) Then
+				   Do
+						If ((Zone2A_Owner == Zone_Owner_Part) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Owner_Part) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						If ((Zone3_Owner == Zone_Owner_Part) And (Zone3_Request == "")) Then
+							Zone3_Request = Zone_Part_Release_Zone_3
+						End If
+						If (Zone3_Owner <> Zone_Owner_Part) Then
+							gotZones(3) = 1
+						End If
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							gotZones(1) = 1
+							gotZones(2) = 1
+							gotZones(3) = 1
+							
+						End If
+					Loop Until ((res < 0) Or ((gotZones(1) == 1) And (gotZones(2) == 1) And (gotZones(3) == 1)))
+					If (res < 0) Then
+					   strResult = Str(res)
+					Else
+					   strResult = Cmd_Pass
+					End If
+				Else
+					state = 90
+				End If	
+	End If
+	If (ToolID_MotherBoard <> Func_GripperID) Then
+		'Turn off gripper Vac
+		Set IO[outGripVacOff]
+	End If
+Func_Home = strResult
+End Function
+Function Func_Initialize() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = ""
+Dim loc As Position
+Dim tempLoc As Position
+Dim safeLoc As Position
+Dim tempCntr As Integer
+Dim appHeight As Float
+Dim currentZone As String
+Dim gotZones(4) As Integer
+Dim timeout As Integer
+res = 0
+appHeight = Recovery_AppOffset
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+	MOTOR ON
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+
+		cycleTime = TIMER
+		state = 5
+
+		CASE 5
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process/2
+		    ACCEL Accel_Process/2
+		    DECEL Accel_Process/2
+			state = 10
+		CASE 10
+			'Wait until motion is completed
+			Wait (MotionComplete)
+		    state = 15
+		CASE 15
+		   'Check for gripper status.
+		    currentZone = Func_Current_Zone
+		   	Select Case Func_GripperID
+			Case ToolID_MotherBoard
+			    S[39] = "Tool MB: "
+				'Check Vac
+				'If (IO[inGripDummyNVacPres])  Then 
+					'Determine zone
+				   	Select Case currentZone
+				   	Case Zone_B
+						'Check to see if robot is at chassis
+						CHANGETOOL ToolFrame_MotherBoard
+						CHANGEWORK WorkFrame_AreaB_MotherBoard
+						'If within an inch, drop it
+						loc = P[LOC_PlaceMotherboard]
+						If (Dist(CurPos,loc) < Recovery_Drop_ZOffset_MB) Then
+							'Drop MB
+							'Turn off gripper Vac
+							Set IO[outGripVacOff]
+							Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+							'Check tool changer state
+							If (Not IO[inGripDummyNVacPres]) Then
+							    MOVE P, @P loc + (0,0,appHeight),Next  
+								strResult = ""
+							Else ' Recovery
+								res = ERR_UNEXP_PART_PRESENT
+							End If
+						Else 'Return MotherBoard
+						S[38] = "Start Return MB"
+							strResult = Func_Return_MB
+							If (strResult == Cmd_Pass) Then
+								strResult = ""
+							Else
+								res = Val(strResult)
+							End If
+						End If
+					Case Zone_2
+						'Check to see if robot is at chassis
+						CHANGETOOL ToolFrame_MotherBoard
+						CHANGEWORK WorkFrame_Area2_MotherBoard
+						'If within an inch, drop it
+						loc = P[LOC_PlaceMotherboard]
+						If (Dist(CurPos,loc) < Recovery_Drop_ZOffset_MB) Then
+							'Drop MB
+							'Turn off gripper Vac
+							Set IO[outGripVacOff]
+							Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+							'Check tool changer state
+							If (Not IO[inGripDummyNVacPres]) Then
+							    MOVE P, @P loc + (0,0,appHeight),Next
+								strResult = ""
+							Else ' Recovery
+								res = ERR_UNEXP_PART_PRESENT
+							End If
+						Else 'Return MotherBoard
+							strResult = Func_Return_MB
+							If (strResult == Cmd_Pass) Then
+								strResult = ""
+							Else
+								res = Val(strResult)
+							End If
+						End If
+					Case Zone_C
+						'
+						If (Not IO[inGripDummyNVacPres]) Then
+							strResult = Func_Nest_Recovery
+							If (strResult == Cmd_Pass) Then
+								strResult = ""
+							Else
+								res = Val(strResult)
+							End If
+						Else
+							res = ERR_NOT_SAFE_TO_MOVE
+						End If
+
+					Case Else
+						res = ERR_NOT_SAFE_TO_MOVE
+					End Select
+			'	Else ' Not part:  Z up and then return gripper.
+				'	Set IO[outGripVacOff]
+					'Determine zone
+				   '	Select Case currentZone
+				   	'Case Zone_C
+					'	If (Not IO[inGripDummyNVacPres]) Then
+					'		strResult = Func_Nest_Recovery
+					'		If (strResult == Cmd_Pass) Then
+					'			strResult = ""
+					'		Else
+					'			res = Val(strResult)
+					'		End If
+					'	Else
+					'		res = ERR_NOT_SAFE_TO_MOVE
+					'	End If
+					'Case Else
+					    ' Return gripper and then home
+					'End Select			
+				'End If
+		  	Case ToolID_CPU
+			S[39] = "Tool CPU: "
+			    CHANGETOOL 0
+				Select Case currentZone
+				Case Zone_3, Zone_2
+				    CHANGEWORK WorkFrame_Area2_MotherBoard
+					safeLoc = J2P(J[LOCJ_Home_Area2])
+				Case Zone_B
+				    CHANGEWORK WorkFrame_AreaB_MotherBoard
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Zone_C
+					'Recovery from Nest
+					If ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])) Then
+						strResult = Func_Nest_Recovery
+						If (strResult == Cmd_Pass) Then
+							strResult = ""
+						Else
+							res = Val(strResult)
+						End If
+					Else
+						res = ERR_NOT_SAFE_TO_MOVE
+					End If
+				Case Else
+					res = ERR_NOT_SAFE_TO_MOVE
+				End Select
+
+				If ((res == 0) And (ToolID_CPU == Func_GripperID)) Then
+					'If at a CPU or Cover location, open gripper
+					tempCntr = 0
+					Do 'Determine the nearest pick or place location
+						Select Case tempCntr
+						Case 0
+							tempLoc = P[LOC_PickCPU1]
+							tempCntr = 1
+						Case 1
+							tempLoc = P[LOC_PickCPU2]
+							tempCntr = 2
+						Case 2
+							tempLoc = P[LOC_PlaceCPU1]
+							tempCntr = 3
+						Case 3
+							tempLoc = P[LOC_PlaceCPU2]
+							tempCntr = -1 'Not at a CPU location
+						Case Else
+							'
+						End Select													
+						If (Dist(CurPos,tempLoc)< Recovery_Drop_ZOffset_CPU) Then
+							'Open gripper
+							res = Gripper(Grip_Open)
+							Wait ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])), IOPneumaticTimeout
+							tempCntr = 0
+						End If
+					Loop Until (tempCntr <= 0)
+                    If (tempCntr < 0) Then '
+						CHANGETOOL ToolFrame_CoverCPU
+						Select Case currentZone
+						Case Zone_3
+							res = ERR_NOT_SAFE_TO_MOVE
+						Case Zone_2
+						    CHANGEWORK WorkFrame_Area2_MotherBoard
+							safeLoc = J2P(J[LOCJ_Home_Area2])
+						Case Zone_B
+						    CHANGEWORK WorkFrame_AreaB_MotherBoard
+							safeLoc = J2P(J[LOCJ_Home_AreaB])
+						Case Zone_C
+							'Recovery from Nest
+						Case Else
+							res = ERR_NOT_SAFE_TO_MOVE
+						End Select
+						tempCntr = 0
+						Do 'Determine the nearest pick or place location
+							Select Case tempCntr
+							Case 0
+								tempLoc = P[LOC_PickCoverCPU1]
+								tempCntr = 1
+							Case 1
+								tempLoc = P[LOC_PickCoverCPU2]
+								tempCntr = 2
+							Case 2
+								tempLoc = P[LOC_PlaceCoverCPU1]
+								tempCntr = 3
+							Case 3
+								tempLoc = P[LOC_PlaceCoverCPU2]
+								tempCntr = -1 'Not at a CPU Cover location
+							Case Else
+								'
+							End Select													
+							If (Dist(CurPos,tempLoc)< 5) Then
+								'Open gripper
+								res = Gripper(Grip_Open)
+								Wait ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])), IOPneumaticTimeout
+								tempCntr = 0
+							End If
+						Loop Until (tempCntr <= 0)
+					End If
+                    If (res == 0) Then
+						tempLoc = CurPos
+						LetZ tempLoc = PosZ(safeLoc)
+						Move L, @E tempLoc, Next
+						'Move to Zone B
+						strResult = Func_Move_To_Zone(Zone_B)
+					Else
+						strResult = Str(res)
+					End If
+					If (Val(strResult) < 0) Then
+							'error
+					Else
+						strResult = ""
+						'Determine if part is cover or CPU
+	                    If((Not IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])) Then 'CPU
+							strResult = Func_Return_CPU
+							If (Val(strResult) < 0) Then
+									'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						ElseIf((IO[inGripDummyNVacPres]) And ( Not IO[inGripCPUClosed])) Then 'CPU Cover 
+							strResult = Func_Return_CPU_Cover
+							If (Val(strResult) < 0) Then
+								'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						ElseIf ((tempCntr == 0) Or ((IO[outGripCloseRet]) And (Not IO[outGripClose]) And (IO[outGripOpen]) And (Not IO[outGripOpenRet])))Then
+						 ' Gripper is opened
+							'Return gripper					
+						Else '
+							'Move to Cover CPU position to drop off what ever in the gripper
+							strResult = Func_Return_CPU_Cover
+							If (Val(strResult) < 0) Then
+								'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						End If
+					End If
+				End If
+			Case ToolID_HeatSinks
+			S[39] = "Tool HS: "
+			'If at a HeatSinks posittion in Chassis area, release HeatSinks because a screw might be there.
+				CHANGETOOL 0
+				CHANGEWORK WorkFrame_Area2_MotherBoard
+			    Select Case currentZone
+				Case Zone_3, Zone_2
+					safeLoc = J2P(J[LOCJ_Home_Area2])
+				Case Zone_B
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Zone_C
+					'Recovery from Nest
+					If ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])) Then
+						strResult = Func_Nest_Recovery
+						If (strResult == Cmd_Pass) Then
+							strResult = ""
+						Else
+							res = Val(strResult)
+						End If
+					Else
+						res = ERR_NOT_SAFE_TO_MOVE
+					End If
+				Case Else
+					res = ERR_NOT_SAFE_TO_MOVE
+				End Select
+				If ((res == 0) And (ToolID_HeatSinks == Func_GripperID)) Then
+					'If at a CPU or Cover location, open gripper
+					tempCntr = 0
+					Do 'Determine the nearest pick or place location
+						Select Case tempCntr
+						Case 0
+							CHANGEWORK WorkFrame_AreaB_MotherBoard
+							tempLoc = P[LOC_PickHeatSink1]
+							tempCntr = 1
+						Case 1
+							CHANGEWORK WorkFrame_AreaB_MotherBoard
+							tempLoc = P[LOC_PickHeatSink2]
+							tempCntr = 2
+						Case 2
+							CHANGEWORK WorkFrame_Area2_MotherBoard
+							tempLoc = P[LOC_PlaceHeatSink1]
+							tempCntr = 3
+						Case 3
+							CHANGEWORK WorkFrame_Area2_MotherBoard
+							tempLoc = P[LOC_PlaceHeatSink2]
+							tempCntr = -1 'Not at a HeatSinks location
+						Case Else
+							'
+						End Select													
+						If (Dist(CurPos,tempLoc)< Recovery_Drop_ZOffset_HeatSinks) Then
+							'Open gripper
+							res = Gripper(Grip_Open)
+							Wait ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])), IOPneumaticTimeout 'Wait until gripper open
+							tempCntr = 0
+						End If
+					Loop Until (tempCntr <= 0)
+					tempLoc = CurPos
+					LetZ tempLoc = PosZ(safeLoc)
+					Move L, @E tempLoc, Next
+					'Move to Zone B
+					strResult = Func_Move_To_Zone(Zone_B)
+					If (Val(strResult) < 0) Then
+							'error
+					Else
+						strResult = ""
+						If ((IO[inGripCPUClosed]) And (Not IO[inGripDummyNVacPres]))  Then 'Close for HeatSinks
+							strResult = Func_Return_HeatSinks
+							If (Val(strResult) < 0) Then
+									'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						ElseIf ((tempCntr == 0) Or ((IO[outGripCloseRet]) And (Not IO[outGripClose]) And (IO[outGripOpen]) And (Not IO[outGripOpenRet])))Then
+						 ' Gripper is opened
+							'Return gripper					
+						Else '
+							'Move to Cover CPU position to drop off what ever in the gripper
+							strResult = Func_Return_HeatSinks
+							If (Val(strResult) < 0) Then
+								'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						End If
+					End If
+				End If
+			Case ToolID_DimmMemory
+			S[39] = "Tool Dimm: "
+			'If at a Dimm posittion in Chassis area, release Dimm because latch might be ingaged.
+				CHANGETOOL 0
+				CHANGEWORK WorkFrame_Area2_MotherBoard
+			    Select Case currentZone
+				Case Zone_3, Zone_2
+					safeLoc = J2P(J[LOCJ_Home_Area2])
+				Case Zone_B
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Zone_C
+					'Recovery from Nest
+					If ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])) Then
+						strResult = Func_Nest_Recovery
+						If (strResult == Cmd_Pass) Then
+							strResult = ""
+						Else
+							res = Val(strResult)
+						End If
+					Else
+						res = ERR_NOT_SAFE_TO_MOVE
+					End If
+				Case Else
+					res = ERR_NOT_SAFE_TO_MOVE
+				End Select
+				If ((res == 0) And (ToolID_DimmMemory == Func_GripperID)) Then
+					'If at a CPU or Cover location, open gripper
+					tempCntr = 0
+					Do 'Determine the nearest pick or place location
+						Select Case tempCntr
+						Case 0
+							CHANGEWORK WorkFrame_AreaB_MotherBoard
+							tempLoc = P[LOC_PickDimmPallet1]
+							tempCntr = 1
+						Case 1
+							CHANGEWORK WorkFrame_Area2_MotherBoard
+							tempLoc = P[LOC_PlaceDimm1]
+							tempCntr = -1 'Not at a Dimm location
+						Case Else
+							'
+						End Select													
+						If (PosZ(CurPos) < (PosZ(tempLoc) + 10)) Then
+							'Open gripper
+							res = Gripper(Grip_Open)
+							Wait ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])), IOPneumaticTimeout 'Wait until gripper open
+							tempCntr = 0
+						End If
+					Loop Until (tempCntr <= 0)
+					tempLoc = CurPos
+					LetZ tempLoc = PosZ(safeLoc)
+					Move L, @E tempLoc, Next
+					'Move to Zone B
+					strResult = Func_Move_To_Zone(Zone_B)
+					If (Val(strResult) < 0) Then
+							'error
+					Else
+						strResult = ""
+						If ((IO[inGripCPUClosed]) And (Not IO[inGripDummyNVacPres]))  Then 'Close for Dimm
+							strResult = Func_Return_Dimm
+							If (Val(strResult) < 0) Then
+									'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						ElseIf ((tempCntr == 0) Or ((IO[outGripCloseRet]) And (Not IO[outGripClose]) And (IO[outGripOpen]) And (Not IO[outGripOpenRet])))Then
+						 ' Gripper is opened
+							'Return gripper					
+						Else '
+							'Move to Dimm position to drop off Dimm at first slot
+							strResult = Func_Return_Dimm
+							If (Val(strResult) < 0) Then
+								'error
+								res = Val(strResult)
+							Else
+								strResult = "" ' return gripper after this.
+							End If
+						End If
+					End If
+				End If				
+			Case ToolID_None	
+				'Move home
+			S[39] = "Tool None: "
+			Case Else
+				'Raise and error
+				S[39] = "Tool Invalid number: "
+			End Select
+			state = 20
+		CASE 20
+			Wait (MotionComplete)
+			If (Func_GripperID > 0) Then
+				'Need to move to Zone_B
+				Select Case Func_Current_Zone
+				Case Zone_3, Zone_2
+					safeLoc = J2P(J[LOCJ_Home_Area2])
+				Case Zone_B
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Zone_C
+					'Recovery from Nest
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Else
+					res = ERR_NOT_SAFE_TO_MOVE
+				End Select
+				If (res == 0) Then
+				    'Move to home
+					loc = CurPos
+					LetZ loc = PosZ(safeLoc)
+					Move L, @E loc, Next
+					
+					strResult = Func_Move_To_Zone(Zone_B)
+					If (strResult == Zone_B) Then
+						strResult = ""
+			        End If
+				End If
+				strResult = Func_Gripper_Return(GripReturn_Home)
+				If (strResult = Cmd_Pass) Then
+ 					state = 25
+					strResult = ""
+				Else
+					res = Val(strResult)
+				End If
+			ElseIf (Func_GripperID == 0) Then
+				Select Case Func_Current_Zone
+				Case Zone_3, Zone_2
+					safeLoc = J2P(J[LOCJ_Home_Area2])
+				Case Zone_B
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Zone_C
+					'Recovery from Nest
+					safeLoc = J2P(J[LOCJ_Home_AreaB])
+				Case Else
+					res = ERR_NOT_SAFE_TO_MOVE
+				End Select
+				If (res == 0) Then
+				    'Move to home
+					loc = CurPos
+					LetZ loc = PosZ(safeLoc)
+					Move L, @E loc, Next
+					
+					strResult = Func_Move_To_Zone(Zone_B)
+					If (strResult == Zone_B) Then
+						strResult = ""
+			        End If
+				End If
+			Else 
+				res = ERR_UNEXP_GRIP_STATE
+			End If
+			state = 25
+		CASE 25
+			'Wait until motion is completed
+			Wait (MotionComplete)
+			state = 30
+		CASE 30
+			state = 70
+			timeout = Timer
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+		CASE 70
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2A_Owner == Zone_Owner_Part) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Owner_Part) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						If ((Zone3_Owner == Zone_Owner_Part) And (Zone3_Request == "")) Then
+							Zone3_Request = Zone_Part_Release_Zone_3
+						End If
+						If (Zone3_Owner <> Zone_Owner_Part) Then
+							gotZones(3) = 1
+						End If
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 80
+						End If
+				Else
+					state = 80
+				End If
+		CASE 80
+			' Set motion parameters
+			ExtSpeed PendantSpeed
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			If ((ToolID_MotherBoard <> Func_GripperID) Or (Not IO[inGripDummyNVacPres])) Then
+				'Turn off gripper Vac
+				Set IO[outGripVacOff]
+			End If
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+			RobotGripSimID = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   Initialize: " + str(res)
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+			I[168] = TIMER - cycleTime 'Command complete
+			I[169] = 0
+Func_Initialize = strResult
+End Function
+Function Func_Return_MB() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime
+'Must be at in Zone B Home position
+Dim loc As Position
+Dim locTemp As Position
+Dim locTemp1 As Position
+Dim locNearest As Position
+Dim strResult As String
+Dim strCurrentZone As String
+Dim appHeight As Float
+Dim dropHeight As Float
+Dim path(20) As Position
+Dim locTool As Position
+Dim toolAngle As Float
+Dim tweak_Angle As Float
+Dim safeLoc As Position
+Dim index As Integer
+Dim nearestPoint As Integer
+
+appHeight = Recovery_AppOffset
+dropHeight = Recovery_Drop_ZOffset_MB
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		cycleTime = TIMER
+		'state = 5
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			state = 6
+		CASE 6
+		    Wait (MotionComplete)
+		    state = 7
+		CASE 7
+		    strCurrentZone = Func_Current_Zone
+			Select Case strCurrentZone
+			Case Zone_3, Zone_2
+				CHANGETOOL ToolFrame_MotherBoard
+				CHANGEWORK WorkFrame_Area2_MotherBoard
+				ExtSpeed MB_PendantSpeed
+			    SPEED MB_Speed_Process
+			    ACCEL MB_Accel_Process
+			    DECEL MB_Accel_Process
+				loc = P[LOC_PlaceMotherboard]
+				If (Dist(CurPos,loc) < 5) Then
+					'Drop MB
+					'Turn off gripper Vac
+					Set IO[outGripVacOff]
+					Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+					MOVE L, @E CurPos + (0,0,Recovery_AppOffset)
+					strResult = Func_Move_To_Zone(Zone_B)
+					If (strResult == Zone_B) Then
+						strResult = ""
+						state = 80
+			        End If
+				Else
+					state = 10
+				End If
+			Case Zone_B
+				CHANGETOOL ToolFrame_MotherBoard
+				CHANGEWORK WorkFrame_AreaB_MotherBoard
+				ExtSpeed MB_PendantSpeed
+			    SPEED MB_Speed_Process
+			    ACCEL MB_Accel_Process
+			    DECEL MB_Accel_Process
+				loc = P[LOC_PickMotherboard]
+				If (Dist(CurPos,loc) < 10) Then
+					'Drop MB
+					'Turn off gripper Vac
+					Set IO[outGripVacOff]
+					Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+					MOVE L, @E CurPos + (0,0,Recovery_AppOffset)
+					MOVE P, @E J[LOCJ_Home_AreaB]
+					state = 50
+				Else
+					state = 30
+				End If
+			Case Zone_C
+					'Recovery from Nest
+			Case Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End Select
+		CASE 10
+			state = 15
+		CASE 15
+			'Determine if robot is near insert path
+			If (strCurrentZone == Zone_2) Then
+                'If(IO[inGripDummyNVacPres]) Then
+					'Search for nearest path point
+					If (MB_MaxPath > 0) Then
+						locTemp1 = CurPos
+						nearestPoint = 0
+						For index = MB_Path_10 TO MB_MaxPath
+	  						locTemp = J2P(J[index])
+							If (nearestPoint == 0) Then
+								locNearest = locTemp
+								nearestPoint = index
+							Else
+								If (Dist(locTemp1,locTemp) < Dist(locTemp1,locNearest)) Then 
+									locNearest = locTemp
+									nearestPoint = index
+							    End If
+							End If			
+						Next 
+
+						'Verify nearest point
+						If (Dist(locTemp1,locNearest) < 20) Then
+							Select Case nearestPoint
+							Case MB_Path_10, MB_Path_11
+								MOVE L, @P J[MB_Path_10], Next
+							Case MB_Path_12 'MB Path 12: First insert
+								'MOVE L, @P J[MB_Path_12], Next
+								MOVE L, @P J[MB_Path_11], Next
+								MOVE L, @P J[MB_Path_10], Next
+
+							Case MB_Path_13 'MB Path 13: Insert more with additional tilt
+								'MOVE L, @P J[MB_Path_13], Next
+								MOVE L, @P J[MB_Path_12], Next
+								MOVE L, @P J[MB_Path_11], Next
+								MOVE L, @P J[MB_Path_10], Next
+							
+							Case MB_Path_14 'MB Path 14: Insert some more
+								'MOVE L, @P J[MB_Path_14], Next
+								MOVE L, @P J[MB_Path_13], Next
+								MOVE L, @P J[MB_Path_12], Next
+								MOVE L, @P J[MB_Path_11], Next
+								MOVE L, @P J[MB_Path_10], Next
+
+							Case MB_Path_15, MB_Path_16 'MB Path 15: Move to slightly above final position
+														'MB Path 16: Move to final position
+
+								'Turn off gripper Vac
+								Set IO[outGripVacOff]
+								Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+								'Check tool changer state
+								If (Not IO[inGripDummyNVacPres]) Then
+									MOVE L, @P J[MB_Path_10], Next
+								    'done in next state  
+								Else ' Recovery
+									res = ERR_UNEXP_PART_PRESENT
+								End If
+							Case Else
+								'done 
+							End Select
+						Else 
+							strResult = Str(ERR_NOT_SAFE_TO_MOVE)
+						End If
+					Else
+					'Done in next state
+						 
+					End If
+				'Else
+					'done in next state
+				'End If 'part present
+			End If 'zone 2
+			state = 30
+			Wait (MotionComplete)		
+		CASE 30
+			CHANGETOOL 0
+			CHANGEWORK 0			
+			locTemp = CurPos
+			LetZ locTemp = PosZ(J2P(J[LOCJ_Home_Area2]))
+			MOVE L, @E locTemp
+			If (strCurrentZone == Zone_2) Then
+				MOVE L, @E J[LOCJ_Home_Area2]
+				MOVE L, @E J2P(J[LOCJ_Home_Area2]) + (0,200)
+			End If
+			'MOVE P, @E J[LOCJ_Home_AreaB]
+			strResult = Func_Move_To_Zone(Zone_B)
+			If (Val(strResult)< 0) Then
+				res = Val(strResult)
+			Else
+				strResult = ""
+			End If
+			state = 40
+		CASE 40
+		    'If (Not IO[inGripDummyNVacPres]) Then
+			'	CHANGETOOL 0
+			'	CHANGEWORK 0			
+			'	locTemp = CurPos
+			'	LetZ locTemp = PosZ(J2P(J[LOCJ_Home_Area2]))
+			'	MOVE L, @E locTemp
+			'    state = 60
+			'Else
+				state = 45
+			'End If
+		CASE 45
+			'Drop part
+			CHANGETOOL ToolFrame_MotherBoard
+			CHANGEWORK WorkFrame_AreaB_MotherBoard
+			loc = P[LOC_PickMotherboard]
+			MOVE P, @P loc + (0,0,appHeight),Next
+			MOVE L, @E loc + (0,0,dropHeight)
+			'Turn off gripper Vac
+			Set IO[outGripVacOff]
+			Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+			'Check tool changer state
+			If (Not IO[inGripDummyNVacPres]) Then
+				MOVE L, @P loc + (0,0,appHeight),Next  
+			Else ' Recovery
+				res = ERR_UNEXP_PART_PRESENT
+			End If
+			state = 60
+		CASE 60
+			strResult = Func_Move_To_Zone(Zone_B)
+			strResult = ""
+			state = 80
+		CASE 80
+		   ' Move to home
+			MOVE P, @E J[LOCJ_Home_AreaB]
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[38]= str(state) + "  MB Return: " + str(res)
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+
+Func_Return_MB = strResult
+End Function
+Function Func_Return_CPU_Cover() As String
+'Must be at Zone B Home position before called
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = ""
+Dim safeLoc As Position
+Dim appHeight As Float
+Dim dropHeight As Float
+Dim loc As Position
+Dim tempLoc As Position
+Dim timeout As Float
+res = 0
+appHeight = Recovery_AppOffset
+dropHeight = Recovery_Drop_ZOffset_CPU
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		cycleTime = TIMER
+		state = 5
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			state = 7
+		CASE 7
+			Select Case Func_Current_Zone
+			Case Zone_3, Zone_2
+				safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_B
+				safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+					'Recovery from Nest
+			Case Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End Select
+		    loc = CurPos
+			LetZ loc = PosZ(safeLoc)
+			Move L, @P loc, Next
+			strResult = Func_Move_To_Zone(Zone_B)
+			If (strResult == Zone_B) Then
+				strResult = ""
+			End If
+			state = 10
+			timeout = Timer
+			CHANGETOOL ToolFrame_CoverCPU
+			CHANGEWORK WorkFrame_AreaB_Pallet
+		CASE 10
+		   'Wait until robot is near Zone B home
+		   	If ((MotionComplete) And (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) < 10)) Then
+				state = 15
+			ElseIf ((Timer - timeout)> 15000) Then
+			    res = ERR_ROBOT_CANT_COMPLETE_MOTION
+			End If
+		CASE 15
+			loc = P[LOC_PlaceCoverCPU1]
+		   ' Approach the parts pallet
+			MOVE L, @P loc + (0,0,appHeight),Next
+			MOVE L, @E loc + (0,0,dropHeight)
+			Delay 500
+			state = 20			
+		CASE 20
+			'Open gripper
+			res = Gripper(Grip_Open)
+			Wait ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])), IOPneumaticTimeout
+			state = 25
+		CASE 25
+			If ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])) Then
+				state = 40
+			Else
+				res = ERR_GRIP_NOT_OPENED
+			End If
+			tempLoc = CurPos
+			LetZ tempLoc = PosZ(J2P(J[LOCJ_Home_AreaB]))
+			MOVE L, @E tempLoc
+		CASE 40
+		   ' Move to home
+			MOVE P, @E J[LOCJ_Home_AreaB]
+			state = 80
+		CASE 80
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   CPU Cover Return: " + str(res)
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+			I[168] = TIMER - cycleTime 'Command complete
+			I[169] = 0
+Func_Return_CPU_Cover = strResult
+End Function
+Function Func_Return_CPU() As String
+'Must be at Zone B Home position before called
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = ""
+Dim safeLoc As Position
+Dim appHeight As Float
+Dim dropHeight As Float
+Dim loc As Position
+Dim tempLoc As Position
+Dim timeout As Integer
+res = 0
+appHeight = Recovery_AppOffset
+dropHeight = Recovery_Drop_ZOffset_CPU
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		cycleTime = TIMER
+		state = 5
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			state = 7
+		CASE 7
+		    'Move to zone B
+			Select Case Func_Current_Zone
+			Case Zone_3, Zone_2
+				safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_B
+				safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+					'Recovery from Nest
+			Case Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End Select
+		    loc = CurPos
+			LetZ loc = PosZ(safeLoc)
+			Move L, @P loc, Next
+			strResult = Func_Move_To_Zone(Zone_B)
+			If (strResult == Zone_B) Then
+				strResult = ""
+			End If
+			state = 10
+		CASE 10
+		   'Wait until robot is near Zone B home
+			CHANGETOOL 0
+			CHANGEWORK WorkFrame_AreaB_Pallet
+			Move L, @E J[LOCJ_Home_AreaB]
+		   	If ((MotionComplete) And (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) < 10)) Then
+				state = 15
+			End If
+		CASE 15
+			loc = P[LOC_PickCPU1]
+		   ' Approach the parts pallet
+			MOVE L, @P loc + (0,0,appHeight),Next
+			MOVE L, @E loc + (0,0,dropHeight)
+			Delay 100
+			state = 20
+		CASE 20
+			'Open gripper
+			res = Gripper(Grip_Open)
+			Wait ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])), IOPneumaticTimeout
+			timeout = Timer
+			state = 25
+		CASE 25
+			If ((IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed])) Then
+				state = 40
+				CHANGETOOL 0
+				CHANGEWORK WorkFrame_AreaB_Pallet
+				tempLoc = CurPos
+				PosZ tempLoc = PosZ(loc) + Recovery_AppOffset
+				MOVE L, @E tempLoc
+			Else
+				If ((Timer - timeout) > InputDebounce) Then
+					res = ERR_GRIP_NOT_OPENED
+				End If
+			End If
+		CASE 40
+		   ' Move to home
+			MOVE P, @E J[LOCJ_Home_AreaB]
+			state = 80
+		CASE 80
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   CPU Return: " + str(res)
+	'Check for alarm raised
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+Func_Return_CPU = strResult
+End Function
+
+Function Func_Return_HeatSinks() As String
+'Must be at Zone B Home position before called
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = ""
+Dim safeLoc As Position
+Dim appHeight As Float
+Dim dropHeight As Float
+Dim loc As Position
+Dim tempLoc As Position
+res = 0
+appHeight = Recovery_AppOffset
+dropHeight = Recovery_Drop_ZOffset_HeatSinks
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		cycleTime = TIMER
+		state = 5
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+				Wait (MotionComplete), 10000
+		CASE 5
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			state = 7
+		CASE 7
+		    'Move to zone B
+			Select Case Func_Current_Zone
+			Case Zone_3, Zone_2
+				safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_B
+				safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+					'Recovery from Nest
+			Case Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End Select
+		    loc = CurPos
+			LetZ loc = PosZ(safeLoc)
+			Move L, @P loc, Next
+			strResult = Func_Move_To_Zone(Zone_B)
+			If (strResult == Zone_B) Then
+				strResult = ""
+				MOVE L,@E J[LOCJ_Home_AreaB]
+			End If
+			state = 10
+		CASE 10
+		   'Wait until robot is near Zone B home
+			CHANGETOOL 0
+			CHANGEWORK WorkFrame_AreaB_Pallet
+		   	If ((MotionComplete) And (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) < 5)) Then
+				state = 15
+			End If
+		CASE 15
+		   ' Approach the parts pallet
+			SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			loc = P[LOC_PickHeatSink1]
+		   ' Approach the parts pallet
+			MOVE P, @P loc + (0,0,-appHeight)H,Next
+			MOVE L, @E loc + (0,0,dropHeight)
+			Delay 100
+			state = 20
+		CASE 20
+			'Open gripper
+			res = Gripper(Grip_Open)
+			Wait ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])), IOPneumaticTimeout
+			state = 25
+		CASE 25
+			If ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])) Then
+				state = 40
+			Else
+				res = ERR_GRIP_NOT_OPENED
+			End If
+			MOVE P, @P CurPos + (0,0,-appHeight)H,Next
+		CASE 40
+		   ' Move to home
+			MOVE P, @E J[LOCJ_Home_AreaB]
+			state = 80
+		CASE 80
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   CPU Return: " + str(res)
+	'Check for alarm raised
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+Func_Return_HeatSinks = strResult
+End Function
+Function Func_Return_Dimm() As String
+'Must be at Zone B Home position before called
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = ""
+Dim appHeight As Float
+Dim dropHeight As Float
+Dim loc As Position
+Dim tempLoc As Position
+Dim safeLoc As Position
+res = 0
+appHeight = Recovery_AppOffset
+dropHeight = Recovery_Drop_ZOffset_Dimm
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		cycleTime = TIMER
+		state = 5
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			state = 7
+		CASE 7
+		    'Move to zone B
+			Select Case Func_Current_Zone
+			Case Zone_3, Zone_2
+				safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_B
+				safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+					'Recovery from Nest
+			Case Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End Select
+		    loc = CurPos
+			LetZ loc = PosZ(safeLoc)
+			Move L, @P loc, Next
+			strResult = Func_Move_To_Zone(Zone_B)
+			If (strResult == Zone_B) Then
+				strResult = ""
+				MOVE L,@E J[LOCJ_Home_AreaB]
+			End If
+			state = 10
+		CASE 10
+		   'Wait until robot is near Zone B home
+			CHANGETOOL 0
+			CHANGEWORK WorkFrame_AreaB_Pallet
+		   	If ((MotionComplete) And (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) < 5)) Then
+				state = 15
+			End If
+		CASE 15
+			loc = P[LOC_PickDimmPallet1]
+		   ' Approach the parts pallet
+			MOVE L, @P loc + (0,0,appHeight),Next
+			MOVE L, @E loc + (0,0,dropHeight)
+			Delay 100
+			state = 20
+		CASE 20
+			'Open gripper
+			res = Gripper(Grip_Open)
+			Wait ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])), IOPneumaticTimeout
+			state = 25
+		CASE 25
+			If ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])) Then
+				state = 40
+			Else
+				res = ERR_GRIP_NOT_OPENED
+			End If
+			tempLoc = CurPos
+			LetZ tempLoc = PosZ(loc) + Recovery_AppOffset
+			MOVE L, @E tempLoc
+		CASE 40
+		   ' Move to home
+			MOVE P, @E J[LOCJ_Home_AreaB]
+			state = 80
+		CASE 80
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   Dimm Return: " + str(res)
+	'Check for alarm raised
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+Func_Return_Dimm = strResult
+End Function
+
+Function Func_Nest_Recovery() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = ""
+Dim loc As Position
+Dim tempLoc As Position
+Dim curLoc As Position
+Dim distToCenter As Float
+Dim index As Integer
+Dim nearestPosition As Integer
+Dim nearestDistance AS Float
+Dim nearestLoc As Position
+res = 0
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+
+		cycleTime = TIMER
+		state = 5
+		CASE 5
+		    I[160]= TIMER - cycleTime  'Start command
+			IF (I[160] < 1) Then
+			   I[160] = 1
+			End If
+			' Set motion parameters
+			ExtSpeed Recovery_Pendant_Speed
+		    SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			state = 10
+		CASE 10
+		   'Check for gripper status. 
+		    gripNumber = Func_GripperID
+			If (ToolID_None = gripNumber) Then
+				'Release gripper eventhough there is nothing there.
+				res = Gripper(Grip_ToolRelease)
+				tempLoc = CurPos
+			    MOVE L, @E tempLoc + (0,0, 2)'Separation
+			    Wait Not IO[inToolConnected], 10000
+				IF (Not IO[inToolConnected]) Then
+					LetZ tempLoc = ToolZClearRecovery
+					MOVE L, @P tempLoc,Next
+					SPEED Speed_General
+			    	ACCEL Accel_General
+			    	DECEL Accel_General
+					MOVE L, @E J[LOCJ_Home_AreaB]
+				    state = 90
+				Else
+					res = ERR_UNEXP_GRIP_STATE
+				End If
+			Else
+				If (gripNumber < 0) Then
+					res = ERR_UNEXP_GRIP_STATE
+				Else
+ 					state = 15
+				End If
+			End If
+		CASE 15
+				res = Gripper(Grip_ToolPick)
+				tempLoc = CurPos
+			    MOVE L, @E tempLoc + (0,0, 2)'Separation
+			    Wait IO[inToolConnected], 10000
+				IF (IO[inToolConnected]) Then
+				    gripNumber = Func_GripperID
+					If (ToolID_None = gripNumber) Then
+						res = ERR_UNEXP_GRIP_STATE
+					Else
+						state = 16
+					End If
+				Else
+					res = ERR_UNEXP_GRIP_STATE
+				End If
+		CASE 16
+			'Validate grip number
+			If ((gripNumber <= LOC_NestMax) And (gripNumber > 0))Then
+				loc = P[gripNumber + 1 + Product_Offset]
+				 If (OutRange(loc) = 0) Then
+				     state = 17
+				 Else
+					 res = ERR_POSITION_OUTOFRANGE
+				 End If
+			Else
+				res = ERR_INVALID_GRIPPER_ID
+			End If
+		CASE 17 'Determine physical location
+		    tempLoc = P[1 + 1 + Product_Offset]
+			nearestPosition = 1
+			nearestLoc = P[1 + 1 + Product_Offset]
+			nearestDistance = Dist(CurPos, tempLoc)
+ 			For index = 2 To LOC_NestMax
+			    tempLoc = P[index + 1 + Product_Offset]
+				If (OutRange(tempLoc) == 0) Then
+				    If (Dist(CurPos, tempLoc) < nearestDistance) Then
+						nearestPosition = index
+						nearestLoc = tempLoc
+						nearestDistance = Dist(CurPos, tempLoc)
+					End If
+				End If
+			Next index
+
+            If ((Dist(loc, nearestLoc) > 2) And (nearestDistance < 30)) Then
+				res = ERR_NOT_SAFE_TO_MOVE
+			Else
+				state = 18
+				I[10]= nearestPosition
+				F[10]= nearestDistance
+				P[10] = nearestLoc
+				If (I[91] > 0) Then
+					Halt
+				End If
+			End If
+		CASE 18
+		    Wait (MotionComplete)
+			curLoc = CurPos
+			If (PosZ(curLoc) <= (PosZ(loc) + ToolPNPDepart + 4)) Then
+				tempLoc = curLoc
+				LetZ tempLoc = PosZ(loc) + ToolPNPDepart
+				Move L, @E tempLoc
+
+				Wait (MotionComplete)
+				curLoc = CurPos
+				tempLoc = curLoc
+				'Move to X position of the nest
+				LetX tempLoc = PosX(loc)
+				Move L, @E tempLoc
+			End IF
+
+			Wait (MotionComplete)
+			tempLoc = CurPos
+			'Move to Y Position of the nest
+			LetY tempLoc = PosY(loc) + F[nearestPosition + 40]
+			Move L, @E tempLoc
+
+			Wait (MotionComplete)				
+			'Move to safe height
+			tempLoc = CurPos
+			LetZ tempLoc = PosZ(loc) + ToolPNPClearOffset
+			Move L, @E tempLoc
+			state = 20
+		CASE 20
+
+			state = 30
+		CASE 30
+			'Return gripper
+			strResult = Func_Gripper_Return(GripReturn_Recovery)
+			If (strResult == Cmd_Pass) Then
+ 				state = 80
+			Else
+				res = Val(strResult)
+			End If
+		CASE 80
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+			RobotGripSimID = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   Nest Recovery: " + str(res)
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+			I[168] = TIMER - cycleTime 'Command complete
+			I[169] = 0
+Func_Nest_Recovery = strResult
+End Function
+Function Func_Gripper_Change() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime
+DEFSTR strResult = "", resStr = ""
+Dim loc As Position
+Dim tempLoc As Position
+Dim gripNumber As Integer
+Dim timeout As Float
+Dim gotZones(4) As Integer
+gripNumber = Val(CurCmdPar1)
+res = 1 'Negative is the error code
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		'FOR ind = 160 TO 198 STEP 1
+		'   I[ind]= 0
+        'NEXT
+		cycleTime = TIMER
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+			' Set motion parameters
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			state = 10
+		CASE 10
+		   'Check for gripper status.  If Correct gripper, command complete.
+			If (gripNumber = Func_GripperID) Then
+				'Expected grip found
+				state = 90
+			Else
+				If (Func_GripperID < 0) Then
+					res = ERR_UNEXP_GRIP_STATE
+				Else
+				    If (Func_GripperID > 0) Then
+						resStr = Func_Gripper_Return(GripReturn_Exchange)
+						If (resStr = Cmd_Pass) Then
+ 							state = 15
+						Else
+							res = Val(resStr)
+						End If
+					Else
+						state =15 'No gripper on EOA
+						If (IO[inToolConnected]) Then
+		    				res = ERR_UNEXP_GRIP_STATE
+						Else
+							'Check current position
+							Select Case Func_Current_Zone
+				 			Case Zone_B
+								'Check height
+								If (Dist(DestPos,J2P(J[LOCJ_Home_AreaB])) > 50) Then
+									If (PosZ(CurPos) < (PosZ(J2P(J[LOCJ_Home_AreaB])) - 150)) Then
+										tempLoc = CurPos
+										LetZ tempLoc = PosZ(J2P(J[LOCJ_Home_AreaB]))
+										Move L, @P tempLoc, Next
+									End If
+									Move P, @P J[LOCJ_Home_AreaB], Next
+								End If
+							Case Zone_C
+								'Already here, make sure it is high enough
+								If (PosZ(CurPos) < (PosZ(loc) + ToolPNPApp - 10)) Then
+									tempLoc = CurPos
+									LetZ tempLoc = PosZ(loc) + ToolPNPApp
+									Move L, @P tempLoc, Next
+								End If
+							Case Else
+								If (Dist(DestPos,J2P(J[LOCJ_Home_AreaB])) > 150) Then
+									tempLoc = CurPos
+								    LetZ tempLoc = PosZ(J2P(J[LOCJ_Home_Area2]))
+								    Move L, @P tempLoc, Next
+						            strResult = Func_Move_To_Zone(Zone_B)
+									If (Val(strResult) < 0) Then
+										'error
+									Else
+									    strResult = ""
+									End If
+								Else
+									MOVE P, @P J[LOCJ_Home_AreaB], Next
+								End If
+							End Select
+						End If
+					End If
+				End If
+			End If
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+			timeout = Timer
+		CASE 15
+				If (Sim_Zone_Control==0) Then
+				   Do
+						If ((Zone2A_Owner == Zone_Owner_Part) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Owner_Part) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						gotZones(3) = 1
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							gotZones(1) = 1
+							gotZones(2) = 1
+							gotZones(3) = 1
+							state = 17
+						End If
+					Loop Until ((res < 0) Or ((gotZones(1) == 1) And (gotZones(2) == 1) And (gotZones(3) == 1)))
+					strResult = ""
+				Else
+					state = 17
+				End If	
+		CASE 17
+			'Validate grip number
+			If ((gripNumber <= LOC_NestMax) And (gripNumber > 0))Then
+				loc = P[gripNumber + 1 + Product_Offset]
+				state = 20
+			Else
+				res = ERR_INVALID_GRIPPER_ID
+			End If
+
+			I[161]= TIMER - cycleTime  'Check gripper status
+			IF (I[161] < 1) THEN
+			   I[161] = 1
+			End If
+		CASE 20
+			'Check gripper position
+			If (ToolID_None = Func_GripperID) Then
+				'No gripper found, proceed
+				state = 23
+			Else
+				res = ERR_UNEXP_GRIPPER_PRES
+			End If
+		CASE 23
+		   ' If (MotionComplete(-1,0)) Then
+				state = 25
+		'	End If
+		CASE 25
+            state = 30
+		CASE 30
+		   ' Approach tool position
+			APPROACH P, loc, ToolPNPApp,NEXT
+			SPEED Speed_Process
+		    ACCEL Accel_Process
+		    DECEL Accel_Process
+			MOVE L, @E loc + (0,0,ToolPNPOffset)
+		   state = 35
+		CASE 35
+			'Clamp gripper
+			Reset IO[outChangerUClmp]
+			Set IO[outChangerClamp]
+			'Reset IO[27]
+			'Set IO[26]
+			Delay 1000
+			Wait IO[inToolConnected], 10000
+		   state = 40
+        CASE 40
+			'Check tool changer state
+			Wait IO[inToolConnected], 10000
+			If (IO[inToolConnected]) Then 
+			    'Check for correct gripper
+				If (gripNumber == Func_GripperID) Then
+					state = 45 'Success:  Gripper is ingagged.
+				Else
+					'
+					set IO[outChangerUClmp]
+					ReSet IO[outChangerClamp]
+					Delay 1000
+					Wait (Not IO[inToolConnected]), 5000
+					If (Not IO[inToolConnected]) Then
+						MOVE L, @E loc + (0,0,ToolPNPApp)
+						MOVE P, @E J[LOCJ_Home_AreaB]						
+						res = ERR_UNEXP_GRIPPER_PRES
+					Else
+						res = ERR_TOOL_CLAMP_FAILED
+						'Just sit there
+					End If
+				End If
+			Else ' Recovery
+				res = ERR_TOOL_CLAMP_FAILED
+				Set IO[outChangerUClmp]
+				Reset IO[outChangerClamp]
+				Wait Not IO[inToolConnected], 10000				
+				If (Not IO[inToolConnected]) Then
+					MOVE L, @E CurPos + (0,0,ToolPNPApp)
+					MOVE P, @E J[LOCJ_Home_AreaB]
+				End If
+			End If
+		CASE 45
+			'Pick Z depart
+			MOVE L, @E  loc + (0,0,ToolPNPDepart), NEXT
+
+			state = 50
+		CASE 50
+		        state = 55
+				If (IO[inToolConnected] == False) Then
+					res = ERR_TOOL_CLAMP_FAILED
+				'	Set IO[outChangerUClmp]
+				'	Reset IO[outChangerClamp]
+				End If
+		CASE 55
+		    RobotGripSimID = gripNumber
+			'Move away from nest
+			SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+            MOVE L, @10 loc + (0,F[gripNumber + 40],ToolPNPDepart), Next
+			MOVE L, @10 loc + (0,F[gripNumber + 40],ToolPNPClearOffset),Next
+			  state = 60
+		CASE 60 'Move to safe from where ever
+			'Move to safe
+			MOVE P, @P J[LOCJ_Home_AreaB], Next
+			state = 70
+		CASE 70
+			'Open gripper
+			If (Func_GripperID <> ToolID_MotherBoard) Then
+			    res = Gripper(Grip_Open)
+		        state = 75
+			Else
+				state = 80
+			End If 
+        CASE 75
+			'Check for part present state
+			If ((IO[inGripDummyNVacPres]) Or (Sim_CPU_Gripper_Sensors == 1)) Then 
+				state = 80 'Success:  Gripper is ingagged.
+			Else ' Recovery
+				res = Gripper(Grip_Open)	
+			End If
+			timeout = Timer
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+		CASE 80
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2A_Owner == Zone_Owner_Part) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Owner_Part) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						If ((Zone3_Owner == Zone_Owner_Part) And (Zone3_Request == "")) Then
+							Zone3_Request = Zone_Part_Release_Zone_3
+						End If
+						If (Zone3_Owner <> Zone_Owner_Part) Then
+							gotZones(3) = 1
+						End If
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 90
+						End If
+				Else
+					state = 90
+				End If
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+			
+		CASE ELSE
+        END SELECT
+		S[33] = Str(state) + ": Gripper Change: error: " + strResult
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+Func_Gripper_Change = strResult
+End Function
+
+Function Func_Gripper_Return(Exchange As Integer) As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime, gripNumber
+DEFSTR strResult = "", resStr = ""
+Dim loc As Position
+Dim locTemp As Position
+Dim timeout As Float
+Dim gotZones(4) As Integer
+Dim tempVal As Float
+
+res = 1 'Negative is the error code
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+		'FOR ind = 160 TO 198 STEP 1
+		'   I[ind]= 0
+        'NEXT
+		cycleTime = TIMER
+		state = 5
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                 '   res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+		    I[160]= TIMER - cycleTime  'Start command
+			IF (I[160] < 1) Then
+			   I[160] = 1
+			End If
+			' Set motion parameters
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			state = 10
+		CASE 10
+		   'Check for gripper status.  
+				gripNumber = Func_GripperID
+			If (gripNumber = 0) Then
+				'No grip found
+				state = 90
+			Else
+				If (Func_GripperID < 0) Then
+					res = ERR_UNEXP_GRIP_STATE
+				Else
+ 					state = 15			
+				End If
+			End If
+		CASE 15
+			'Validate grip number
+			If ((gripNumber <= LOC_NestMax) And (gripNumber > 0))Then
+				loc = P[gripNumber + 1 + Product_Offset]
+				state = 18
+				strResult = Motion_Complete_Distance(10,20000)
+				strResult = ""
+			Else
+				res = ERR_INVALID_GRIPPER_ID
+			End If
+		CASE 18
+		    If (MotionComplete(-1,0)) Or (Dist(CurPos,J2P(J[LOCJ_Home_AreaB])) < 40) Then
+			    If (Exchange <> GripReturn_Recovery) Then
+			    	Move P, @P J[LOCJ_Home_AreaB], Next
+				End If
+				If (Sim_Zone_Control == 0) Then
+					state = 19
+					timeout = Timer
+					gotZones(1) = 0
+					gotZones(2) = 0
+					gotZones(3) = 0
+				Else
+					state = 22
+				End If
+			End If
+		CASE 19
+						If (Zone2A_Owner == Zone_Owner_Part) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If (Zone2B_Owner == Zone_Owner_Part) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						If (Zone3_Owner == Zone_Owner_Part) Then
+							Zone3_Request = Zone_Part_Release_Zone_3
+						End If
+						If (Zone3_Owner <> Zone_Owner_Part) Then
+							gotZones(3) = 1
+						End If
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 20
+						End If
+		CASE 20
+			state = 22
+		CASE 22
+			'Check current position
+			If ((Dist(CurPos,J2P(J[LOCJ_Home_AreaB])) < 50) Or (Exchange == GripReturn_Recovery)) Then
+				'Safe to move
+				'Approach between nests.
+
+				  
+			'	If (Exchange <> GripReturn_Recovery) Then
+					MOVE L, @3 loc + (0,F[gripNumber + 40],ToolPNPClearOffset),Next
+					MOVE L, @3 loc + (0,F[gripNumber + 40],ToolPNPDepart), Next
+					MOVE L, @E loc + (0,0,ToolPNPDepart), Next
+					SPEED Speed_Process
+			    	ACCEL Accel_Process
+			    	DECEL Accel_Process
+					MOVE L, @E loc '+ (0,0,ToolPNPOffset)'This is the final place position
+			'	Else 'Recovery
+			'		locTemp = loc + (0,F[gripNumber + 40],ToolPNPDepart)
+			'		tempVal = PosZ(loc) + ToolPNPDepart
+			'		If (PosZ(CurPos) > tempVal) Then
+
+			'		Else
+			'			LetZ locTemp = tempVal
+
+			'		End If
+
+			'	End If
+				state = 25
+			Else
+				'Not safe to move
+				res = ERR_ROBOT_NOT_READY
+			End If
+		CASE 25
+            res = Gripper(Grip_ToolRelease)	
+			MOVE L, @E loc + (0,0,ToolPNPOffset + 1.5)'This is the final place position
+			Wait Not IO[inToolConnected], 10000				
+			If (IO[inToolConnected]) Then
+				'Failed to release part
+				res = ERR_UNEXP_GRIP_STATE
+	        Else
+			    state = 30
+				
+			End If
+		CASE 30
+		   ' Approach tool position
+			APPROACH L, loc, ToolPNPApp,NEXT
+			state = 80
+		CASE 80
+			'Move to safe
+			' Set motion parameters
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+		'	If (Exchange <> GripReturn_Exchange) Then
+				MOVE P, @P J[LOCJ_Home_AreaB]
+		'	End If
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+			RobotGripSimID = 0
+		CASE ELSE
+        END SELECT
+		S[33]= str(state) + "   Gripper Return: " + str(res)
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+
+Func_Gripper_Return = strResult
+End Function
+
+Function Func_Move_To_Point() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime
+DEFSTR strResult = "", resStr = ""
+DEFPOS cnrB,cnrC,cnr2,cnr3
+Dim loc As Position
+Dim locSafe As Position
+Dim appHeight AS Float
+Dim posNumber As Integer
+Dim workNumber As Integer
+Dim toolNumber As Integer
+Dim destZone As String
+Dim locJoint As Joint
+Dim curZone As String
+Dim safeLoc As Position
+posNumber = Val(Mid(CurCmdPar1,2,Len(CurCmdPar1)-1))  'Approach height
+appHeight = Val(CurCmdPar2)
+workNumber = Val(CurCmdPar3)
+toolNumber = Val(CurCmdPar4)
+
+res = 1 'Negative is the error code
+ 	TAKEARM
+	CHANGETOOL 0
+	CHANGEWORK 0
+	S[33] = "executing move to point: " + CurCmdPar1
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+
+		      cycleTime = TIMER
+		'Determine if robot is in ready state
+				IF (True) Then 'Need actual signal
+           			state = 5
+				Else
+				'Robot is not in ready state, raise an alarm
+                    res = ERR_ROBOT_NOT_READY
+				End If
+		CASE 5
+		S[33] = "5 executing move to point: " + CurCmdPar1
+		    I[160]= TIMER - cycleTime  'Start command
+			IF (I[160] < 1) Then
+			   I[160] = 1
+			End If
+			' Set motion parameters
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			state = 10
+		CASE 10
+		S[33] = "10 executing move to point"
+		   'Check for gripper status.  If Correct gripper, proceed.
+		'	If (0 = Func_GripperID) Then
+				'Expected no grip found
+				state = 15
+		'	Else
+		'		res = ERR_UNEXP_GRIPPER_PRES  'Unexpected gripper present
+		'	End If
+		CASE 15
+
+
+			I[161]= TIMER - cycleTime  'Check gripper status
+			IF (I[161] < 1) THEN
+			   I[161] = 1
+			End If
+			state = 20
+		CASE 20 
+			If (toolNumber >= 0) Then
+				CHANGETOOL toolNumber
+
+	   			If ((workNumber >= 0) And (workNumber < 8)) Then
+	   	  			CHANGEWORK workNumber
+	   			Else 
+		  			res = ERR_INVALID_WORKSPACE
+          			cycling = 0
+	   			End If
+			Else
+	    		res = ERR_INVALID_TOOL
+	    		cycling = 0
+			End If
+			state = 21
+		CASE 21
+			S[33] = "21 executing move to point: " + CurCmdPar1
+			If ((posNumber > 0) And (posNumber <= PosMax)) Then
+			     'loc = P[posNumber]
+				 locJoint = P2J(P[posNumber])
+				 If (OutRange(loc) = 0) Then
+				     state = 22
+				 Else
+					 res = ERR_POSITION_OUTOFRANGE
+				 End If
+			Else
+				res = ERR_INVALID_POS
+			End If
+		CASE 22
+		S[33] = "20 executing move to point: " + CurCmdPar1
+		    'Check current position
+			If (Joint(1,locJoint) > 90) Then
+				destZone = Zone_C
+            ElseIf ((Joint(1,locJoint) >= 0) And (Joint(1,locJoint) <= 90))  Then
+				destZone = Zone_B
+            ElseIf ((Joint(1,locJoint) <= 0) And (Joint(1,locJoint) >= -90))  Then
+				destZone = Zone_2
+			Else 
+			    destZone = Zone_3
+			End If
+			state = 25
+		CASE 25
+            curZone = Func_Current_Zone
+			Select Case curZone
+			Case Zone_B
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_2
+               safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_3
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			End Select
+		    loc = CurPos
+		    LetZ loc = PosZ(safeLoc)
+		    Move L, @P loc, Next
+            strResult = Func_Move_To_Zone(destZone)
+			If (Val(strResult) < 0) Then
+				'error
+			Else
+			    strResult = ""
+			End If
+			CHANGETOOL toolNumber
+	        CHANGEWORK workNumber
+			state = 30
+		CASE 30
+
+		   state = 35
+		CASE 35
+		S[33] = "30 executing move to point: " + CurCmdPar1
+		   ' Approach the parts pallet
+
+			MOVE L, @P loc + (0,0,appHeight),Next
+			MOVE L, @E loc
+			state = 80
+		CASE 80
+			state = 90
+		CASE 90
+		S[33] = "90 executing move to point done: " + CurCmdPar1
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+
+	'Check for alarm raised		
+		IF (res < 0)  THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+		If (Len(strResult) > 0) Then
+			cycling = 0
+		End If
+	WEND
+			I[168] = TIMER - cycleTime 'Command complete
+			I[169] = 0
+Func_Move_To_Point = strResult
+End Function
+Function Func_Get_Work() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime,cmd_Fid1 = 0, cmd_Fid2 = 0,posNumber1 = 0,posNumber2 = 0
+DEFSTR strResult = "", resStr = ""
+DEFPOS pos_Fid1, pos_Fid2, loc
+Dim offset_Fid1_X As Float
+Dim offset_Fid1_Y As Float
+Dim offset_Fid2_X As Float
+Dim offset_Fid2_Y As Float
+Dim workNumber As Integer
+Dim gripNumber As Integer
+Dim locHome As Integer
+Dim fidRetry As Integer
+Dim destZone As String
+Dim curZone As String
+Dim safeLoc As Position
+Dim tempLoc As Position
+Dim timeout As Float
+Dim gotZones(4) As Integer
+workNumber = Val(CurCmdPar1)
+	TAKEARM
+	CHANGEWORK 0
+	CHANGETOOL 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+			state = 5
+		CASE 5
+		    If ((workNumber > 0) And (workNumber < 8)) Then
+			    'get vision fiducial command
+				'Do not change 241 to
+				cmd_Fid1 = I[241 + ((workNumber - 1) * 3)]
+				cmd_Fid2 = I[241 + ((workNumber - 1) * 3) + 1]
+				'This contains the GOLDEN position number of Fid 1
+				posNumber1 = LOC_W1Fid1 + ((workNumber - 1) * 3)
+				posNumber2 = posNumber1 + 1
+				pos_Fid1 = P[posNumber1]
+				pos_Fid2 = P[posNumber2]
+				Select Case workNumber
+				Case 1, 2
+				    locHome = LOCJ_Home_AreaB
+					destZone = Zone_B
+				Case 3, 4, 5
+				    locHome = LOCJ_Home_Area2
+					destZone = Zone_2	
+				Case 6, 7
+				    locHome = LOCJ_Home_Area3
+					destZone = Zone_3
+				Case Else
+				    locHome = LOCJ_Home_AreaB				
+				End Select							    
+			Else
+				res = ERR_INVALID_WORKSPACE
+			End If
+			state = 13 'Use Set_Zones()
+			timeout = Timer
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+		CASE 13'get zones
+		        strResult = ""
+				If (Sim_Zone_Control==0) Then
+					Select Case workNumber
+					Case 1, 2
+							gotZones(1) = 1
+							gotZones(2) = 1
+							gotZones(3) = 1
+					Case 3, 4, 5
+						If ((Zone2A_Owner == Zone_Released) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Owner_Part
+							Delay 10
+						End If
+						If (Zone2A_Owner == Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Released) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Owner_Part
+							Delay 10
+						End If
+						If (Zone2B_Owner == Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+							gotZones(3) = 1
+					Case 6, 7
+						If ((Zone2A_Owner == Zone_Released) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Owner_Part
+							Delay 10
+						End If
+						If (Zone2A_Owner == Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Released) And (Zone2B_Request == ""))Then
+							Zone2B_Request = Zone_Owner_Part
+							Delay 10
+						End If
+						If (Zone2B_Owner == Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						If ((Zone3_Owner == Zone_Released) And (Zone3_Request == "")) Then
+							Zone3_Request = Zone_Owner_Part
+							Delay 10
+						End If
+						If (Zone3_Owner == Zone_Owner_Part) Then
+							gotZones(3) = 1
+						End If
+					Case Else
+						res = ERR_INVALID_WORKSPACE
+					End Select
+					If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+				    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+							If (gotZones(1) <> 1) Then
+								res = ERR_PARTROBOT_REQ_ZONE2A
+							End If
+							If (gotZones(2) <> 1) Then
+								res = ERR_PARTROBOT_REQ_ZONE2B
+							End If
+							If (gotZones(3) <> 1) Then
+								res = ERR_PARTROBOT_REQ_ZONE3
+							End If
+						End If
+					Else
+						state = 14
+					End If
+				Else
+					state = 14
+				End If
+		CASE 14
+		   'Check for gripper status.  
+			If (Func_GripperID > 0) Then
+				res = ERR_UNEXP_GRIPPER_PRES
+			Else
+ 				state = 15			
+			End If
+		CASE 15
+			'Move to zone
+			curZone = Func_Current_Zone
+			Select Case curZone
+			Case Zone_B
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_2
+               safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_3
+               safeLoc = J2P(J[LOCJ_Home_Area3])
+			End Select
+			state = 16
+		CASE 16
+			If (curZone <> destZone) Then
+	            strResult = Func_Move_To_Zone(destZone)
+				If ((strResult == Cmd_Pass) Or (strResult == destZone)) Then
+					strResult = ""
+					state = 20
+				End If
+			Else
+				state = 18
+			End If
+		CASE 18
+		    If (MotionComplete(-1,0)) Then
+			    If (Dist(pos_Fid1,CurPos) > 5) Then
+					tempLoc = CurPos
+					tempLoc = tempLoc + (0,0,PosZ(safeLoc) - PosZ(CurPos))
+					Move L, @P tempLoc, Next
+					Move P, @P safeLoc, Next
+				End If
+				state = 20
+				fidRetry = 1
+			End If
+		CASE 20
+			Move P,@E pos_Fid1
+			state = 25		
+		CASE 25
+		    Delay FidSettling
+			state = 30
+		CASE 30
+			'Take picture 1
+			strResult = Func_Take_Image(cmd_Fid1)
+			If (Val(strResult) < 0 ) Then
+			    If (fidRetry <= FidRetryMax) Then
+					fidRetry = fidRetry + 1
+					strResult = ""
+					state = 20
+				Else
+					res = Val(strResult)
+					strResult = ""
+				End If
+			Else
+				strResult = ""
+				state = 35
+			End If
+		CASE 35
+			'Get vision offset:  FidRetryMax
+			offset_Fid1_X = Vision_OffsetX
+			offset_Fid1_Y = Vision_OffsetY
+			If ((offset_Fid1_X > VisOffset_Max) Or (offset_Fid1_X < VisOffset_Min)) Then
+			    If (fidRetry <= FidRetryMax) Then
+					fidRetry = fidRetry + 1
+					state = 20
+				Else
+					res = ERR_VIS_X_OUTOFRANGE
+				End If
+			Else
+			    If ((offset_Fid1_Y > VisOffset_Max) Or (offset_Fid1_Y < VisOffset_Min)) Then
+				    If (fidRetry <= FidRetryMax) Then
+						fidRetry = fidRetry + 1
+						state = 20
+					Else
+						res = ERR_VIS_Y_OUTOFRANGE
+					End If
+				Else
+					state = 40
+					fidRetry = 1
+				End If
+			End If
+		CASE 40
+            'Move to fiducial 2
+			Move P,@E pos_Fid2
+		   state = 45
+		CASE 45
+		   Delay FidSettling
+		   state = 50		    
+		CASE 50
+			'Take picture
+			strResult = Func_Take_Image(cmd_Fid2)
+			If (Val(strResult) < 0 ) Then
+			    If (fidRetry <= FidRetryMax) Then
+					fidRetry = fidRetry + 1
+					strResult = ""
+					state = 40
+				Else
+					res = Val(strResult)
+					strResult = ""
+				End If
+			Else
+				strResult = ""
+				state = 55
+			End If
+		CASE 55
+			'Validate vision offset
+			offset_Fid2_X = Vision_OffsetX
+			offset_Fid2_Y = Vision_OffsetY
+			If ((offset_Fid2_X > VisOffset_Max) Or (offset_Fid2_X < VisOffset_Min)) Then
+			    If (fidRetry <= FidRetryMax) Then
+					fidRetry = fidRetry + 1
+					state = 40
+				Else
+					res = ERR_VIS_X_OUTOFRANGE
+				End If
+			ElseIf ((offset_Fid2_Y > VisOffset_Max) Or (offset_Fid2_Y < VisOffset_Min)) Then 
+				If (fidRetry <= FidRetryMax) Then
+					fidRetry = fidRetry + 1
+					state = 40
+				Else
+					res = ERR_VIS_Y_OUTOFRANGE
+				End If
+			Else
+				state = 60
+			End If
+		CASE 60
+		    'Calculate screw offset based on common frame.
+			If  ((workNumber == WorkOffset_Screw_W3) Or (workNumber == WorkOffset_Screw_W4) Or (workNumber == WorkOffset_Screw_W6)) Then 'Send offset to screw robot
+                strResult = Func_Set_Screw_Offset(workNumber,offset_Fid1_X, offset_Fid1_Y,offset_Fid2_X, offset_Fid2_Y)
+		        If (strResult == Cmd_Pass) Then
+				   strResult = ""
+				End If
+			End If
+			   'Proceed
+			state = 70
+		CASE 70
+		    'Process work coordinate
+            strResult = Func_Calculate_Work(workNumber,offset_Fid1_X, offset_Fid1_Y,offset_Fid2_X, offset_Fid2_Y)
+                If (strResult == Cmd_Pass) Then
+				   strResult = ""
+				End If
+			state = 75
+        CASE 75
+		' Move home
+            strResult = Func_Move_To_Zone(Zone_B)
+			If ((strResult == Cmd_Pass) Or (strResult == Zone_B)) Then
+				strResult = ""
+			End If
+			If (Sim_Zone_Control == 0) Then
+				state = 80
+			Else
+				state = 90
+			End If
+		CASE 80
+		    strResult = Motion_Complete_Distance(30,20000)
+			strResult = ""
+			state = 85
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+			timeout = Timer
+		CASE 85
+						If (Zone2A_Owner == Zone_Owner_Part) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If (Zone2B_Owner == Zone_Owner_Part) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						If (Zone3_Owner == Zone_Owner_Part) Then
+							Zone3_Request = Zone_Part_Release_Zone_3
+						End If
+						If (Zone3_Owner <> Zone_Owner_Part) Then
+							gotZones(3) = 1
+						End If
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 90
+						End If
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33] = Str(state) + ": executing Get Work: " + CurCmdPar1
+	'Check for alarm raised		
+		IF (res < 0)  THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+		If (Len(strResult) > 0) Then
+			cycling = 0
+		End If
+	WEND
+Func_Get_Work = strResult
+End Function
+
+Function Func_Pick_Motherboard() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime
+DEFSTR strResult = "", resStr = ""
+Dim loc As Position
+Dim tempLoc As Position
+Dim appHeight AS Float
+Dim posNumber As Integer
+appHeight = Val(CurCmdPar1)  'Approach height
+res = 1 'Negative is the error code
+ 	TAKEARM
+	CHANGETOOL ToolFrame_MotherBoard
+	CHANGEWORK WorkFrame_AreaB_MotherBoard
+		S[33] = "executing pick motherboard"
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+			state = 5
+		CASE 5
+		    I[160]= TIMER - cycleTime  'Start command
+			IF (I[160] < 1) Then
+			   I[160] = 1
+			End If
+			' Set motion parameters
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			posNumber = LOC_PickMotherboard
+			state = 7
+		CASE 7
+			'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then 
+				res = ERR_UNEXP_PART_PRESENT
+			Else ' 
+				state = 10
+			End If
+		CASE 10
+		   'Check for gripper status.  If Correct gripper, proceed.
+			If (ToolID_MotherBoard = Func_GripperID) Then
+				'Expected grip found
+				state = 15
+			Else
+				res = ERR_WRONG_GRIP_CMD  'Wrong gripper for this command
+			End If
+		CASE 15
+			If ((posNumber > 0) And (posNumber < PosMax)) Then
+			     loc = P[posNumber]
+				 state = 17
+			Else
+				res = ERR_INVALID_POS
+			End If
+			I[161]= TIMER - cycleTime  'Check gripper status
+			IF (I[161] < 1) THEN
+			   I[161] = 1
+			End If
+		CASE 17
+			strResult = Motion_Complete_Distance(30,20000)
+			strResult = ""
+			state = 20
+		CASE 20
+			'Check current position
+            If (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) > 50) Then
+			    tempLoc = CurPos
+				LetZ tempLoc = PosZ(J2P(J[LOCJ_Home_Area2]))
+				Move L, @P tempLoc
+		     	strResult = Func_Move_To_Zone(Zone_B)
+		 	End If
+			state = 30
+		CASE 30
+			CHANGETOOL ToolFrame_MotherBoard
+	        CHANGEWORK WorkFrame_AreaB_MotherBoard
+		   ' Approach the parts pallet
+			MOVE L, @P loc + (0,0,appHeight),Next
+			MOVE L, @E loc
+		   state = 35
+		CASE 35
+			'Turn on gripper Vac
+			Reset IO[outGripVacOff]
+			Wait IO[inGripDummyNVacPres], IOPneumaticTimeout
+		    state = 40
+        CASE 40
+			'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then 
+				state = 45 'Success:  Gripper is ingagged.
+				Zone2A_Request = Zone_Owner_Part
+				Zone2B_Request = Zone_Owner_Part
+			Else ' Recovery
+				res = ERR_PART_NOT_PRESENT
+				Set IO[outGripVacOff]
+				Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout				
+				MOVE L, @P loc + (0,0,appHeight)
+			End If
+		CASE 45
+			'Pick Z depart
+			MOVE L, @P loc + (0,0,appHeight), Next
+			state = 60
+		CASE 60
+		    If( Sim_Zone_Control == 0) Then
+		    '	strResult = Set_Zones(Zone_2,Zone_2B,"")	
+			'	strResult = ""
+			End If
+			state = 80
+		CASE 80
+			MB_MaxPath = 0 'Robot is not at zone 2
+			state = 90
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33] = Str(state) + ": executing pick motherboard"
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+			I[168] = TIMER - cycleTime 'Command complete
+			I[169] = 0
+Func_Pick_Motherboard = strResult
+End Function
+
+Function Func_Hold_Motherboard() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime
+DEFSTR strResult = "", resStr = ""
+Dim locTool As Position
+Dim loc As Position
+Dim locTemp As Position
+Dim locTemp1 As Position
+Dim locTempPath As Joint
+Dim jntTemp1 As Joint
+Dim jntTemp2 As Joint
+Dim appHeight AS Float
+Dim posNumber As Integer
+Dim tweak_Angle As Float
+Dim timeout As Float
+Dim toolAngle As Float
+Dim pathIndex As Integer
+Dim currentZone As String
+Dim gotZones(4) As Integer
+
+appHeight = Val(CurCmdPar1)  'Approach height
+
+res = 1 'Negative is the error code
+ 	TAKEARM
+	CHANGETOOL ToolFrame_MotherBoard
+	CHANGEWORK WorkFrame_Area2_Chassis
+	
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+			state = 5
+		CASE 5
+			' Set motion parameters
+			ExtSpeed PendantSpeed
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			state = 10
+		CASE 10
+
+		   'Check for gripper status.  If Correct gripper, proceed.
+			If (ToolID_MotherBoard = Func_GripperID) Then
+				'Expected grip found
+				state = 15
+			Else
+				res = ERR_WRONG_GRIP_CMD  'Wrong gripper for this command
+			End If
+		CASE 15
+		    posNumber = LOC_PlaceMotherboard
+			If ((posNumber > (PosMax - 99)) And (posNumber <= PosMax)) Then
+			     loc = P[posNumber]
+				 tweak_Angle = TweakAngle
+				If( Sim_Zone_Control == 0) Then
+                   state = 17	
+				   timeout = Timer
+				Else
+					state = 20
+				End If
+			Else
+				res = ERR_INVALID_POS
+			End If
+			timeout = Timer
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+		CASE 17
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2A_Owner == Zone_Released) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Owner_Part
+						End If
+						If (Zone2A_Owner == Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Released) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Owner_Part
+						End If
+						If (Zone2B_Owner == Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						gotZones(3) = 1
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REQ_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REQ_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REQ_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 20
+						End If
+				Else
+					state = 20
+				End If
+		CASE 20
+			'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then 
+				state = 25 'Success:  Gripper has part.
+			Else ' Recovery
+				res = ERR_PART_DROPPED
+			End If
+		CASE 25
+			strResult = Motion_Complete_Distance(50,20000)
+			state = 30
+		CASE 30
+			'Check current position
+			If (PosZ(CurPos) > (PosZ(loc) + appHeight - 60)) Then
+				state = 40
+			Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End If
+        CASE 40
+		'Check zone
+			currentZone = Func_Current_Zone
+			If (currentZone == Zone_B) Then
+				state = 50
+			Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End If		
+		CASE 50	
+			CHANGETOOL ToolFrame_MotherBoard
+			CHANGEWORK WorkFrame_AreaB_MotherBoard
+
+			locTemp1= P[LOC_PickMotherboard] + (0,0,appHeight)
+			'locTemp1 = CurPos
+			locTemp = locTemp1 + (0,10)H
+			jntTemp1 = P2J(locTemp)
+			'MOVE P, @P locTemp ,Next
+			
+		   	' Approach the parts pallet
+			locTemp1 = locTemp + (-400,0)H
+			jntTemp2 = P2J(locTemp1)
+
+			'MOVE L, @P locTemp1 ,Next
+            
+			'Check zones
+			timeout = Timer
+			strResult = Get_Zone_Owner(Zone_All)
+			If (Val(strResult) >=0) Then
+				strResult = ""
+				res = 0
+			ElseIf (Val(strResult)< 0) Then
+				res = Val(strResult)
+			ElseIf (Zone2A_Owner <> Zone_Owner_Part) Then
+				res = ERR_PARTROBOT_REQ_ZONE2A
+			ElseIf (Zone2B_Owner <> Zone_Owner_Part) Then 
+				res = ERR_PARTROBOT_REQ_ZONE2B
+			Else
+
+			End If
+			state = 55
+		CASE 55
+				CHANGETOOL ToolFrame_MotherBoard
+				CHANGEWORK WorkFrame_Area2_Chassis
+
+				MOVE P, @P jntTemp1 ,Next
+				MOVE L, @P jntTemp2 ,Next
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_10
+				J[MB_Path_10]= P2J(loc + (0,0,appHeight))
+	            MOVE P, @P loc + (0,0,appHeight),Next 'was @10
+
+			state = 60
+			timeout = Timer
+		CASE 60
+				'Check for part present
+			'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then
+				state = 65 'Success:  Gripper has part.
+			Else ' Recovery
+				If ((Timer - timeout) > 2000) Then
+					res = ERR_PART_DROPPED
+				End If
+			End If			
+		CASE 65
+				'Tweak Tool 
+	            locTool = ToolPos(ToolFrame_MotherBoard)
+				toolAngle = PosRZ(ToolPos(ToolFrame_MotherBoard))
+				LetRZ locTool = toolAngle + tweak_Angle
+				Tool ToolFrame_MB_Tweak, locTool
+				CHANGETOOL ToolFrame_MB_Tweak
+	'Tilt motions
+	            locTemp = loc + (MB_Side_Tweak*Cos(toolAngle),MB_Side_Tweak*Sin(toolAngle))
+				locTemp1 = locTemp + (0,ApproTiltDist,-10)H  ' Move back away from chassis insert position
+				locTemp = locTemp1 + (0,0,0,-ApproAngle)H ' Tilt downward
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_11
+				J[MB_Path_11]= P2J(locTemp)  'MB Path 11:
+
+				MOVE L, @3 locTemp, Next   'Was @3
+				state = 67
+				timeout = Timer
+		CASE 67
+			'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then
+				state = 68 'Success:  Gripper has part.
+			Else ' Recovery
+				If ((Timer - timeout) > 2000) Then
+				    MOVE L, @E J[MB_Path_11]
+					MOVE L, @E J[MB_Path_10]
+					res = ERR_PART_DROPPED
+				End If
+			End If
+		CASE 68
+				locTemp1 = locTemp + (0,-20)H
+
+				ExtSpeed MB_PendantSpeed
+			    SPEED MB_Speed_Process
+			    ACCEL MB_Accel_Process
+			    DECEL MB_Accel_Process
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_12
+				J[MB_Path_12]= P2J(locTemp1)
+			
+				MOVE L, @2 locTemp1, Next 'Insert Motherboard  Was @2
+
+				locTemp = locTemp1 + (0,-12,2)H  ' Move back away from chassis insert position
+				locTemp1 = locTemp + (0,0,0,7)H ' Tilt downward
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_13
+				J[MB_Path_13]= P2J(locTemp1)
+			
+				MOVE L, @2 locTemp1, Next   
+			state = 70
+		CASE 70
+				locTemp = locTemp1 + (0,-6)H
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_14
+				J[MB_Path_14]= P2J(locTemp)
+			
+				MOVE L, @2 locTemp, Next 'Insert Motherboard   
+
+				CHANGETOOL ToolFrame_MotherBoard
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_15
+				J[MB_Path_15]= P2J(loc + (0,0,ApproFinal))
+			'	
+				MOVE L, @2 loc + (0,0,ApproFinal),Next
+
+				'Log path for recovery
+				MB_MaxPath = MB_Path_16
+				J[MB_Path_16]= P2J(loc)
+				MOVE L, @E loc
+			state = 75
+		CASE 75
+			'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then
+				state = 78 'Success:  Gripper has part.
+			Else ' Recovery
+				If ((Timer - timeout) > 2000) Then
+					'Turn off gripper Vac
+					Set IO[outGripVacOff]
+					Delay 500
+					loc = CurPos
+					LetZ loc = PosZ(CurPos) + 2
+					Move L, @5 loc
+					Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+					MOVE L, @E J[MB_Path_10]
+					res = ERR_PART_DROPPED
+				End If
+			End If
+		CASE 78
+				ExtSpeed PendantSpeed
+			    SPEED Speed_General
+			    ACCEL Accel_General
+			    DECEL Accel_General
+	            state = 80
+				gotZones(1) = 0
+				gotZones(2) = 0
+				gotZones(3) = 0
+		CASE 80
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2B_Owner == Zone_Owner_Part) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						gotZones(1) = 1
+						gotZones(3) = 1
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 85
+						End If
+				Else
+					state = 85
+				End If
+		CASE 85
+				'Check for part present state
+			If (IO[inGripDummyNVacPres])  Then
+				state = 90 'Success:  Gripper has part.
+			Else ' Recovery
+				res = ERR_PART_NOT_PRESENT
+			End If
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		    S[33] = Str(state) + ": executing hold motherboard"
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+Func_Hold_Motherboard = strResult
+End Function
+Function Func_Release_Motherboard() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime
+DEFSTR strResult = "", resStr = ""
+Dim loc As Position
+Dim appHeight AS Float
+Dim gotZones(4) As Integer
+Dim timeout As Integer
+appHeight = 200  'Approach height
+res = 1 'Negative is the error code
+ 	TAKEARM
+	CHANGETOOL ToolFrame_MotherBoard
+	CHANGEWORK WorkFrame_Area2_Chassis
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+			state = 5
+		CASE 5
+			' Set motion parameters
+		    SPEED Speed_General
+		    ACCEL Accel_General
+		    DECEL Accel_General
+			state = 10
+		CASE 10
+		   'Check for gripper status.  If Correct gripper, proceed.
+			If (ToolID_MotherBoard = Func_GripperID) Then
+				'Expected grip found
+				state = 30
+			Else
+				res = ERR_WRONG_GRIP_CMD  'Wrong gripper for this command
+			End If
+		CASE 30
+            If (Dist(CurPos,P[LOC_PlaceMotherboard]) < 25) Then
+				state = 60
+			Else
+				res = ERR_NOT_SAFE_TO_MOVE
+			End If
+		CASE 60
+			'Turn off gripper Vac
+			Set IO[outGripVacOff]
+			Delay 200
+			loc = CurPos
+			LetZ loc = PosZ(CurPos) + 2
+			Move L, @5 loc
+			Wait Not IO[inGripDummyNVacPres], IOPneumaticTimeout
+		    state = 65
+        CASE 65
+			'Check tool changer state
+			If (Not IO[inGripDummyNVacPres]) Then 
+				state = 70 'Success:  Gripper is ingagged.
+			Else ' Recovery
+				res = ERR_UNEXP_PART_PRESENT
+			End If
+		CASE 70
+			'Pick Z depart
+			loc = CurPos
+			LetZ loc = PosZ(CurPos) + appHeight
+			Move L, @P loc, Next
+			state = 80
+		CASE 80
+			'Move to safe
+			MOVE P, @P J[LOCJ_Home_AreaB], Next
+			state = 90
+		CASE 85
+			'Wait until robot in zone B
+			If ((Joint(1,CurJnt) >= 0) And (Joint(1,CurJnt) <= 90))  Then
+			'	state = 87
+				If( Sim_Zone_Control == 0) Then
+	                state = 87	
+				Else
+					state = 90
+				End If
+			End If
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+			timeout = Timer
+		CASE 87
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2A_Owner == Zone_Owner_Part) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						gotZones(2) = 1
+						gotZones(3) = 1
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 90
+						End If
+				Else
+					state = 90
+				End If
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+
+        END SELECT
+        S[33]=Str(state) + ": Executing Release MotherBoard"
+	'Check for alarm raised		
+		IF (res < 0) THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+	WEND
+			I[168] = TIMER - cycleTime 'Command complete
+			I[169] = 0
+Func_Release_Motherboard = strResult
+End Function
+Function Func_Get_Barcode() As String
+DEFINT state = 0, res = 0, cycling = 1,cycleTime,cmd_Fid1 = 0, cmd_Fid2 = 0,posNumber1 = 0,posNumber2 = 0
+DEFSTR strResult = "", resStr = ""
+DEFPOS pos_Barcode,loc
+Dim offset_Fid1_X As Float
+Dim offset_Fid1_Y As Float
+Dim offset_Fid2_X As Float
+Dim offset_Fid2_Y As Float
+Dim workNumber As Integer
+Dim gripNumber As Integer
+Dim locHome As Integer
+Dim destZone As String
+Dim curZone As String
+Dim safeLoc As Position
+Dim tempLoc As Position
+Dim timeout As Float
+Dim gotZones(4) As Integer
+workNumber = Val(CurCmdPar1)
+	CHANGEWORK WorkFrame_Area2_Chassis
+	CHANGETOOL 0
+  	'Main command loop		   
+	WHILE cycling = 1
+	'Command state machine
+        SELECT CASE state
+		CASE 0
+			state = 3
+		CASE 3
+			If( Sim_Zone_Control == 0) Then
+               	state = 4	
+				timeout = Timer
+			Else
+				state = 5
+			End If
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+		CASE 4
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2A_Owner == Zone_Released) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Owner_Part
+						End If
+						If (Zone2A_Owner == Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Released) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Owner_Part
+						End If
+						If (Zone2B_Owner == Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						gotZones(3) = 1
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REQ_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REQ_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REQ_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 5
+						End If
+				Else
+					state = 5
+				End If
+		CASE 5
+		    If (LOC_ChassisBCR > 0)  Then
+				pos_Barcode = P[LOC_ChassisBCR]
+				destZone = Zone_2
+				locHome = LOCJ_Home_Area2	
+				workNumber = WorkFrame_Area2_Chassis						    
+			Else
+				res = ERR_INVALID_POS
+			End If
+			state = 8
+        CASE 8 
+
+			state = 10
+		CASE 10
+		   'Check for gripper status.  
+			If (Func_GripperID > 0) Then
+				res = ERR_UNEXP_GRIPPER_PRES
+			Else
+ 				state = 15			
+			End If
+		CASE 15
+			'Move to zone
+			curZone = Func_Current_Zone
+			Select Case curZone
+			Case Zone_B
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_C
+               safeLoc = J2P(J[LOCJ_Home_AreaB])
+			Case Zone_2
+               safeLoc = J2P(J[LOCJ_Home_Area2])
+			Case Zone_3
+               safeLoc = J2P(J[LOCJ_Home_Area3])
+			End Select
+			state = 16
+		CASE 16
+			If (curZone <> destZone) Then
+	            strResult = Func_Move_To_Zone(destZone)
+				If ((strResult == Cmd_Pass) Or (strResult == destZone)) Then
+					strResult = ""
+				End If
+				state = 20
+			Else 'Same zone
+				state = 18
+			End If
+		CASE 18
+		    If (MotionComplete(-1,0)) Then
+				CHANGEWORK WorkFrame_Area2_Chassis
+			    CHANGETOOL 0
+			    If (Dist(pos_Barcode,CurPos) > 5) Then
+					tempLoc = CurPos
+					tempLoc = tempLoc + (0,0,PosZ(safeLoc) - PosZ(CurPos))
+					Move L, @P tempLoc, Next
+					Move P, @P safeLoc, Next
+				End If
+				state = 20
+			End If
+		CASE 20
+			CHANGEWORK WorkFrame_Area2_Chassis
+			CHANGETOOL 0
+			Move P,@E pos_Barcode
+			timeout = TIMER
+			VisBarcode_Result = ""
+			state = 25		
+		CASE 25
+			state = 30
+		CASE 30
+			'Take picture 1
+			strResult = Func_Read_Barcode()
+			If ((Timer - timeout)> Barcode_Timeout) Then
+			    res = ERR_VIS_ERROR
+				CurCmdPar1 = strResult
+			ElseIf ((strResult <> Str(ERR_VIS_ERROR)) And (Len(strResult) > 0)) Then
+				 VisBarcode_Result = strResult
+				 CurCmdPar1 = VisBarcode_Result
+			     strResult = ""
+				 state = 80
+			End If
+		CASE 80
+			state = 85
+        CASE 85
+		' Move home
+            strResult = Func_Move_To_Zone(Zone_B)
+			If ((strResult == Cmd_Pass) Or (strResult == Zone_B)) Then
+				strResult = ""
+
+			End If
+			state = 87
+			timeout = Timer
+			gotZones(1) = 0
+			gotZones(2) = 0
+			gotZones(3) = 0
+		CASE 87
+
+				If (Sim_Zone_Control==0) Then
+						If ((Zone2A_Owner == Zone_Owner_Part) And (Zone2A_Request == "")) Then
+							Zone2A_Request = Zone_Part_Release_Zone_2A
+						End If
+						If (Zone2A_Owner <> Zone_Owner_Part) Then
+							gotZones(1) = 1
+						End If
+						If ((Zone2B_Owner == Zone_Owner_Part) And (Zone2B_Request == "")) Then
+							Zone2B_Request = Zone_Part_Release_Zone_2B
+						End If
+						If (Zone2B_Owner <> Zone_Owner_Part) Then
+							gotZones(2) = 1
+						End If
+						gotZones(3) = 1
+						If ((gotZones(1) <> 1) Or (gotZones(2) <> 1) Or (gotZones(3) <> 1)) Then
+					    	If ((Timer - timeout) > Zone_Req_Timeout) Then
+								If (gotZones(1) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2A
+								End If
+								If (gotZones(2) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE2B
+								End If
+								If (gotZones(3) <> 1) Then
+									res = ERR_PARTROBOT_REL_ZONE3
+								End If
+							End If
+							Delay 20
+						Else
+							state = 90
+						End If
+				Else
+					state = 90
+				End If
+		CASE 90
+			'Set result to success.
+			strResult = Cmd_Pass
+			'Set value to complete cycling.
+			cycling = 0
+		CASE ELSE
+        END SELECT
+		S[33] = Str(state) + ": executing Get Work: " + CurCmdPar1
+	'Check for alarm raised		
+		IF (res < 0)  THEN
+		'assign error code to command result variable
+			strResult = Str(res)
+			cycling = 0
+		End If
+		If (Len(strResult) > 0) Then
+			cycling = 0
+		End If
+	WEND
+Func_Get_Barcode = strResult
+End Function
+
+Function Func_Set_TowerLights() As String
+DEFINT state = 0, res = 0, cycling = 1
+DEFSTR strResult = Cmd_Pass
+Dim light_Green As Integer
+Dim light_Yellow As Integer
+Dim light_Red As Integer
+
+light_Green = Val(CmdPar1)
+light_Yellow = Val(CmdPar2)
+light_Red = Val(CmdPar3)
+If ((light_Green < 0) Or (light_Green > 2)) Then
+    res = ERR_PAR_OUTOFRANGE
+Else
+    TowerLight_Green = light_Green
+End If
+If ((light_Yellow < 0) Or (light_Yellow > 2)) Then
+    res = ERR_PAR_OUTOFRANGE
+Else
+	TowerLight_Yellow = light_Yellow
+End If
+If ((light_Red < 0) Or (light_Red > 2)) Then
+    res = ERR_PAR_OUTOFRANGE
+Else
+	TowerLight_Red = light_Red
+End If
+
+If (res < 0) Then
+    strResult = Str(res)
+End If
+
+Func_Set_TowerLights = strResult
+End Function
+
+Function Func_Gripper_Status() As String
+DEFINT state = 0, res = 0, cycling = 1
+DEFSTR strResult = Cmd_Pass
+'  gripperID:  follow the gripper id convention
+'  partID:   1- Motherboard, 2- CPU Cover, 3- CPU, 4- HeatSinks, 5- Dimm Card
+CurCmdPar1 = Str(Func_GripperID)
+CurCmdPar2 = "0"
+Select Case Func_GripperID
+Case ToolID_None
+	CurCmdPar2 = "0"
+Case ToolID_MotherBoard
+    If (IO[inGripDummyNVacPres])  Then 
+         CurCmdPar2 = "1"
+	End If
+Case ToolID_CPU
+    If ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed]))  Then 
+         CurCmdPar2 = "2" 'CPU Cover
+	End If
+    If ((Not IO[inGripDummyNVacPres]) And (IO[inGripCPUClosed]))  Then 
+         CurCmdPar2 = "3" 'CPU
+	End If
+Case ToolID_HeatSinks
+    If ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres]))  Then 
+         CurCmdPar2 = "4" 'HeatSinks
+	End If
+Case ToolID_DimmMemory
+    If ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres]))  Then 
+         CurCmdPar2 = "5" 'Dimm Card
+	End If
+Case Else
+   strResult = Str(ERR_INVALID_GRIPPER_ID)
+End Select
+Func_Gripper_Status = strResult
+End Function
+Function Func_Copy_Product() As String
+'Product_P100 "Candlestick"
+'Product_P200 "CDM"
+'Product_P300 "new product"
+Dim strResult As String
+Dim sourceProduct As String
+Dim destProduct As String
+Dim startPVar As Integer
+Dim startIVar As Integer
+Dim startFVar As Integer
+Dim startSVar As Integer
+Dim counter As Integer
+Dim sourcePosition(300) As Position
+Dim sourceIVariable(100) As Integer
+Dim sourceFVariable(100) As Float
+Dim sourceSVariable(100) As String
+
+
+Select Case sourceProduct
+Case Product_P100
+sourceProduct = Val(CurCmdPar1)
+
+Case Product_P200
+
+Case Product_P300
+
+Case Product_P400
+
+Case Else
+
+End Select
+ 
+For counter = 1 To 300
+
+
+Next
+
+
+Func_Copy_Product = strResult
+End Function

@@ -1,0 +1,564 @@
+#include "globals.h"
+#include "DIO_TAB.h"
+#include "Contec_IO.pcs"
+#include "CmdUtil.pcs"
+#include "RobotUtil.pcs"
+'!TITLE "Screw Robot Interface program"
+
+Sub Main
+
+End Sub
+Function Func_Set_Screw_Offset(WorkNumber As Integer, BaseOffset1_X As Float, BaseOffset1_Y As Float, BaseOffset2_X As Float, BaseOffset2_Y As Float) As String
+Dim res As Integer
+Dim strResult As String
+Dim lastWork As Integer
+Dim lastTool As Integer
+Dim loc As Position
+Dim loc_CommonPoint As Position
+Dim locNew As Position
+Dim locOriginal As Position
+Dim locJointNew As Joint
+Dim locOffset As Position
+CHANGETOOL ToolFrame_Camera
+ChangeWork 0
+res = 0
+If ((WorkNumber = WorkOffset_Screw_W3) Or (WorkNumber = WorkOffset_Screw_W4) Or (WorkNumber = WorkOffset_Screw_W6)) Then    
+    Select Case WorkNumber
+	Case WorkOffset_Screw_W4
+        loc_CommonPoint = P[LOC_W4ScrewRef] 'Taught based on golden work
+	Case WorkOffset_Screw_W6
+        loc_CommonPoint = P[LOC_W6ScrewRef] 'Taught based on golden work
+	Case WorkOffset_Screw_W3
+        loc_CommonPoint = P[LOC_W3ScrewRef] 'Taught based on golden work
+	Case Else
+		'Something wrong
+		Halt
+	End Select
+
+'Calculate new work
+    S[33] = "Set_Screw, Calculate Work: " + str(WorkNumber)
+    strResult = Func_Calculate_Work(WorkNumber,BaseOffset1_X, BaseOffset1_Y, BaseOffset2_X, BaseOffset2_Y)
+
+'Get new location based on new work
+    S[33] = "Set_Screw, New Work: " + str(WorkNumber) +" Current tool: " + str(CurTool)
+    CHANGETOOL ToolFrame_Camera
+    ChangeWork WorkNumber
+    locJointNew = P2J(loc_CommonPoint)
+
+    S[33] = "Set_Screw, Original Work: " + str(WorkNumber)
+'Get original location
+    loc = P[LOC_Golden_W1 + WorkNumber - 1]
+    Work WorkNumber, loc
+    ChangeWork WorkNumber
+
+    S[33] = "Set_Screw, New Loc: " + str(WorkNumber)
+    locOriginal = loc_CommonPoint
+	locNew = J2P(locJointNew)
+
+    S[33] = "Set_Screw, Work offset: " + str(WorkNumber)
+'Calculate offset
+	locoffset = locOriginal    
+    LetX locoffset = PosX(locNew) - PosX(locOriginal)
+    LetY locoffset = PosY(locNew) - PosY(locOriginal)
+    LetZ locoffset = PosZ(locNew) - PosZ(locOriginal)
+	LetRZ locoffset = PosRZ(locNew) - PosRZ(locOriginal)
+
+    S[33] = "Set_Screw, offset setting: " + str(WorkNumber)
+
+    Select Case WorkNumber
+    Case WorkOffset_Screw_W4
+		P[LOC_Offset_Area_2] = locoffset
+	Case WorkOffset_Screw_W6
+		P[LOC_Offset_Area_3] = locoffset
+    Case WorkOffset_Screw_W3
+	    p[LOC_Offset_Area_2_Chassis] = locoffset
+	Case Else
+      res = ERR_INVALID_WORKSPACE
+	End Select
+	'Send offset to Screw Robot
+	strResult = Send_Offset_To_Screw(WorkNumber)
+Else ' wrong WorkNumber
+  res = ERR_INVALID_WORKSPACE
+End If
+'
+If (res <> 0 ) Then
+   strResult = Str(res)
+       S[33] = "Set_Screw, Error: " + strResult
+End If
+Func_Set_Screw_Offset = strResult
+End Function
+'
+Function Send_Offset_To_Screw(WorkSpaceNumber As Integer) As String
+DEFSTR strResult = ""
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value as Object	' CaoVariable Object
+Dim posArray(6) As Float
+
+Select Case WorkSpaceNumber
+Case WorkOffset_Screw_W3
+
+'Offset relative to W5 to be sent to Screw Robot
+'LOC_Offset_Area_2 
+	' Connect
+	m_Ctrl = cao.AddController("RC1", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+	' Send offset Variables
+	m_Value =  m_Ctrl.AddVariable(STR_Offset_Area_2_Chassis, "")
+	posArray(0) = PosX(P[LOC_Offset_Area_2_Chassis])
+	posArray(1) = PosY(P[LOC_Offset_Area_2_Chassis])
+    posArray(2) = PosZ(P[LOC_Offset_Area_2_Chassis])
+    posArray(3) = PosRX(P[LOC_Offset_Area_2_Chassis])
+    posArray(4) = PosRY(P[LOC_Offset_Area_2_Chassis])
+    posArray(5) = PosRZ(P[LOC_Offset_Area_2_Chassis])
+   ' posArray(6) = Fig(P[LOC_Offset_Area_2_Chassis])
+    m_Value.Value = Array(posArray(0),posArray(1),posArray(2),posArray(3),posArray(4),posArray(5))
+	' DisConnect
+	m_Ctrl.Variables.Remove m_Value.Index
+	cao.Controllers.Remove m_Ctrl.Index
+	strResult = Cmd_Pass
+	S[33] = "Send offset to area 2 chassis"
+Case WorkOffset_Screw_W4
+'Offset relative to W5 to be sent to Screw Robot
+'LOC_Offset_Area_2
+	' Connect
+	m_Ctrl = cao.AddController("RC2", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+	' Send offset Variables
+	m_Value =  m_Ctrl.AddVariable(STR_Offset_Area_2, "")
+	posArray(0) = PosX(P[LOC_Offset_Area_2])
+	posArray(1) = PosY(P[LOC_Offset_Area_2])
+    posArray(2) = PosZ(P[LOC_Offset_Area_2])
+    posArray(3) = PosRX(P[LOC_Offset_Area_2])
+    posArray(4) = PosRY(P[LOC_Offset_Area_2])
+    posArray(5) = PosRZ(P[LOC_Offset_Area_2])
+   ' posArray(6) = Fig(P[LOC_Offset_Area_2])
+    m_Value.Value = Array(posArray(0),posArray(1),posArray(2),posArray(3),posArray(4),posArray(5))
+	' DisConnect
+	m_Ctrl.Variables.Remove m_Value.Index
+	cao.Controllers.Remove m_Ctrl.Index
+	strResult = Cmd_Pass
+	S[33] = "Send offset to area 2 MB"
+Case WorkOffset_Screw_W6
+	m_Ctrl = cao.AddController("RC3", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+	' Send offset Variables
+	m_Value =  m_Ctrl.AddVariable(STR_Offset_Area_3, "")
+	posArray(0) = PosX(P[LOC_Offset_Area_3])
+	posArray(1) = PosY(P[LOC_Offset_Area_3])
+    posArray(2) = PosZ(P[LOC_Offset_Area_3])
+    posArray(3) = PosRX(P[LOC_Offset_Area_3])
+    posArray(4) = PosRY(P[LOC_Offset_Area_3])
+    posArray(5) = PosRZ(P[LOC_Offset_Area_3])
+  '  posArray(6) = Fig(P[LOC_Offset_Area_3])
+    m_Value.Value = Array(posArray(0),posArray(1),posArray(2),posArray(3),posArray(4),posArray(5))
+	' DisConnect
+	m_Ctrl.Variables.Remove m_Value.Index
+	cao.Controllers.Remove m_Ctrl.Index
+	strResult = Cmd_Pass
+	S[33] = "Send offset to area 3"
+Case Else
+'Invalid work space
+    strResult = ERR_INVALID_WORKSPACE
+End Select
+
+Send_Offset_To_Screw = strResult
+End Function
+
+
+Function Set_Zone(ZoneId As String) As String
+'Don't use this.  Use Set_Zones instead
+'
+Dim strResult As String 'Return the owner name or unknown.
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value as Object	' CaoVariable Object
+Dim strZone_Var As String
+Dim timing As Integer 
+timing = Timer
+strZone_Var = ""
+	' Connect
+	If (Sim_Zone_Control == 0) Then
+		If ((ZoneId == Zone_2) or (ZoneId == Zone_2B) or (ZoneId == Zone_3)) Then
+			strZone_Var = ""
+			Select Case ZoneId
+			Case Zone_2
+				strZone_Var = Zone2A_Owner_Var
+			Case Zone_2B
+				strZone_Var = Zone2B_Owner_Var
+			Case Zone_3
+				strZone_Var = Zone3_Owner_Var
+			End Select
+		'	strResult = Get_Zone_Owner(ZoneId)
+		'	Select Case strResult
+		'	Case Zone_Owner_Screw
+				'Already owner
+		'	Case Zone_Owner_Part, Zone_Unknown
+			    'Screw Handler has the zone still.
+		'	Case Zone_Released,Zone_Unknown,""
+				'Go ahead and make the request
+			    m_Ctrl = cao.AddController("RS1", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+			   ' Send message
+			    m_Value =  m_Ctrl.AddVariable(strZone_Var, "")
+'If "", no request. "Zone 2", "Zone 2B", "Zone 3","Release Zone 2A", "Release Zone 2B", "Release Zone 3"
+		        m_Value.Value = Zone_Owner_Part
+				' Disconnect
+				m_Ctrl.Variables.Remove m_Value.Index
+				cao.Controllers.Remove m_Ctrl.Index
+			'	strResult = Get_Zone_Owner(ZoneId)
+		'	Case Else
+		'		strResult = Zone_Unknown
+		'	End Select
+	    Else
+			strResult = Zone_Unknown
+		End If
+	Else
+		strResult = Zone_Owner_Screw
+    End If
+'
+Set_Zone = strResult
+'I[49] = Timer - timing
+End Function
+Function Set_Zones(Zone2A As String,Zone2B As String, Zone3 As String) As String
+'Call this before entering a zone
+'Need to make sure zone is released before setting the zone
+'Good command to release all three zones at the same.
+'
+Dim strResult As String 'Return the owner name or unknown.
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value as Object	' CaoVariable Object
+Dim zones as String
+	' Connect
+	If (Sim_Zone_Control == 0) Then
+		If ((Len(Zone2A) > 0) or (Len(Zone2B) > 0) or (Len(Zone3) > 0)) Then
+		        zones = Zone2A + "," + Zone2B + "," + Zone3 + ","
+				'Go ahead and make the request
+			    m_Ctrl = cao.AddController("RS1", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+			   ' Send message
+			    m_Value =  m_Ctrl.AddVariable(Zone_Screw_Request_Var, "")
+				'If "", no request. "Zone 2", "Zone 2B", "Zone 3","Release Zone 2A", "Release Zone 2B", "Release Zone 3"
+		        m_Value.Value = zones
+				' Disconnect
+				m_Ctrl.Variables.Remove m_Value.Index
+				cao.Controllers.Remove m_Ctrl.Index
+				strResult = Zone_Owner_Part
+	    Else
+			strResult = Zone_Unknown
+		End If
+	Else
+		strResult = Zone_Owner_Part
+    End If
+Set_Zones = strResult
+End Function
+
+Function Release_ZoneOLD(ZoneId As String) As String
+'Call this after leaving a zone entering
+'
+Dim strResult As String 'Return the owner name or unknown.
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value as Object	' CaoVariable Object
+Dim releaseZone As String
+	' Connect
+	strResult = ""
+	If (Sim_Zone_Control == 0) Then
+		Select Case ZoneId
+		Case Zone_2
+		    releaseZone = Zone_Part_Release_Zone_2A
+		Case Zone_2B
+		    releaseZone = Zone_Part_Release_Zone_2B
+		Case Zone_3
+		    releaseZone = Zone_Part_Release_Zone_3
+		End Select
+		If (strResult == "") Then
+			strResult = Get_Zone_Owner(ZoneId)
+		'	S[38]= "Set_Zone   1: " + strResult
+			Select Case strResult
+			Case Zone_Released
+				'Already released
+			Case Zone_Owner_Part, Zone_Unknown
+			    'Part Handler has the zone still.
+				'Go ahead and make the request
+			    m_Ctrl = cao.AddController("RS2", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+			   ' Send message
+			    m_Value =  m_Ctrl.AddVariable(Zone_Screw_Request_Var, "")
+		        m_Value.Value = releaseZone
+				' Disconnect
+				m_Ctrl.Variables.Remove m_Value.Index
+				cao.Controllers.Remove m_Ctrl.Index
+				Delay 20
+				strResult = Get_Zone_Owner(ZoneId)
+			'	S[38]= "Set_Zone   2: " + strResult
+			Case Zone_Owner_Screw, Zone_Unknown,""
+				'Screw robot has zone
+			Case Else
+				strResult = Zone_Unknown
+			End Select
+	    Else
+			strResult = Zone_Unknown
+		End If
+	Else
+		strResult = Zone_Released
+	End If
+'
+Release_ZoneOLD = strResult
+End Function
+
+Function Release_Zone2OLD(ZoneId As String) As String
+'Call this after leaving a zone entering
+'
+Dim strResult As String 'Return the owner name or unknown.
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value as Object	' CaoVariable Object
+Dim releaseZone As String
+Dim strZone_Var As String
+	' Connect
+	strResult = ""
+	If (Sim_Zone_Control == 0) Then
+		strZone_Var = ""
+		Select Case ZoneId
+		Case Zone_2
+			strZone_Var = Zone2A_Owner_Var
+		Case Zone_2B
+			strZone_Var = Zone2B_Owner_Var
+		Case Zone_3
+			strZone_Var = Zone3_Owner_Var
+		End Select
+		If (strResult == "") Then
+			strResult = Get_Zone_Owner(ZoneId)
+		'	S[38]= "Set_Zone   1: " + strResult
+			Select Case strResult
+			Case Zone_Released
+				'Already released
+			Case Zone_Owner_Part, Zone_Unknown
+			    'Part Handler has the zone still.
+				'Go ahead and make the request
+			    m_Ctrl = cao.AddController("RS2", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+			   ' Send message
+			    m_Value =  m_Ctrl.AddVariable(strZone_Var, "")
+		        m_Value.Value = Zone_Released
+				' Disconnect
+				m_Ctrl.Variables.Remove m_Value.Index
+				cao.Controllers.Remove m_Ctrl.Index
+				strResult = Get_Zone_Owner(ZoneId)
+			Case Zone_Owner_Screw, Zone_Unknown,""
+				'Screw robot has zone
+			Case Else
+				strResult = Zone_Unknown
+			End Select
+	    Else
+			strResult = Zone_Unknown
+		End If
+	Else
+		strResult = Zone_Released
+	End If
+'
+Release_Zone2OLD = strResult
+End Function
+Function Get_Zone_Owner(ZoneId As String) As String
+'Call this before entering a zone
+' Zone_Screw_Request_Var "S39" 'If "", no request. "Zone 2", "Zone 2B", "Zone 3","Release Zone 2A", "Release Zone 2B", "Release Zone 3"
+' Zone2A_Owner_Var "S40"
+' Zone2B_Owner_Var "S41"
+' Zone3_Owner_Var "S42"
+' Zone_Owner_Part "Part Handler"
+' Zone_Owner_Screw "Screw Handler"
+' Zone_Released "None"
+' Zone_Unknown "Unknown"
+Dim strResult As String
+Dim strZone_Var As String
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value as Object	' CaoVariable Object
+Dim strings As String
+Dim remaining As String
+Dim zoneOwner(4) As String
+Dim timing As Integer
+Dim timing2 As Integer
+timing = Timer
+	' Determine zone to process
+	Select Case ZoneId
+	Case Zone_2
+		strZone_Var = Zone2A_Owner_Var
+	Case Zone_2B
+		strZone_Var = Zone2B_Owner_Var
+	Case Zone_3
+		strZone_Var = Zone3_Owner_Var
+	Case Zone_All
+	'Zones_Owners_Var
+		strZone_Var = Zones_Owners_Var
+	Case Else
+		strZone_Var = ""
+	End Select
+	If (Len(strZone_Var) > 0) Then
+		'cao.Controllers.Remove m_Ctrl.Index
+		m_Ctrl = cao.AddController("RS3", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+		' Get owner from part robot
+		m_Value =  m_Ctrl.AddVariable(strZone_Var, "")
+		timing2 = Timer
+    	strResult = m_Value.Value
+		I[49] = Timer - timing2
+		' Disconnect
+		m_Ctrl.Variables.Remove m_Value.Index
+		cao.Controllers.Remove m_Ctrl.Index
+		Select Case ZoneId
+		Case Zone_2
+			Zone2A_Owner = strResult
+		Case Zone_2B
+			Zone2B_Owner = strResult
+		Case Zone_3
+			Zone3_Owner = strResult
+		Case Zone_All
+		'Zones_Owners_Var
+			strings = strResult
+		    If (InStr(1,strings,",") > 0) Then
+				zoneOwner(1)=LEFT(strings,InStr(1,strings,",")-1)
+				remaining=MID(strings,InStr(1,strings,",")+1,LEN(strings)-InStr(1,strings,","))
+				zoneOwner(2)=LEFT(Remaining,InStr(1,Remaining,",")-1)
+				remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+				zoneOwner(3) = remaining
+			  	Zone2A_Owner = zoneOwner(1)
+				Zone2B_Owner = zoneOwner(2)
+				Zone3_Owner = zoneOwner(3)
+			Else
+			  	Zone2A_Owner = Zone_Unknown
+				Zone2B_Owner = Zone_Unknown
+				Zone3_Owner = Zone_Unknown
+			End If
+		Case Else
+		End Select
+	Else
+		Select Case ZoneId
+		Case Zone_2
+			Zone2A_Owner = Zone_Unknown
+		Case Zone_2B
+			Zone2B_Owner = Zone_Unknown
+		Case Zone_3
+			Zone3_Owner = Zone_Unknown
+		Case Zone_All
+		'Zones_Owners_Var
+			Zone2A_Owner = Zone_Unknown
+			Zone2B_Owner = Zone_Unknown
+			Zone3_Owner = Zone_Unknown
+		Case Else
+		End Select
+		strResult = ""
+	End If
+	Get_Zone_Owner = strResult
+	I[48] = Timer - timing
+End Function
+Function Get_Zone_OwnersOLD() As String
+'The results are stored in Zone2A_Owner, Zone2B_Owner, Zone3_Owner
+Dim strResult As String
+Dim strings As String
+Dim remaining As String
+strings = Get_Zone_Owner(Zone_All)
+strResult = strings
+If (Val(strings) < 0) Then
+  'Error
+Else
+    If (InStr(1,strings,",") > 0) Then
+		Zone2A_Owner=LEFT(strings,InStr(1,strings,",")-1)
+		remaining=MID(strings,InStr(1,strings,",")+1,LEN(strings)-InStr(1,strings,","))
+		Zone2B_Owner=LEFT(Remaining,InStr(1,Remaining,",")-1)
+		remaining=MID(Remaining,InStr(1,Remaining,",")+1,LEN(Remaining)-InStr(1,Remaining,","))
+		Zone3_Owner = remaining
+	Else
+		strResult = Str(ERR_ZONE_CONTROL_FAILED)
+	End If
+End If
+
+Get_Zone_OwnersOLD = strResult
+End Function
+Sub ZoneMonitor
+Dim strResult As String
+Dim completeStatus As Integer
+Dim timeout As Integer
+Dim zone2A As String
+Dim zone2B As String
+Dim zone3 As String
+Dim newRequest As Integer
+Dim m_Ctrl as Object	' CaoController Object
+Dim m_Value_Zone2A as Object	' CaoVariable Object
+Dim m_Value_Zone2B as Object
+Dim m_Value_Zone3 as Object
+
+	completeStatus = 0
+	If (RobCom_Timer == 0) Then
+    	RobCom_Timer = Timer
+	End If
+	timeout = Timer
+	newRequest = 0
+	m_Ctrl = cao.AddController("RS5", "CaoProv.DENSO.RC8", "", Screw_Robot_IP)
+	m_Value_Zone2A =  m_Ctrl.AddVariable(Zone2A_Owner_Var, "")
+	m_Value_Zone2B =  m_Ctrl.AddVariable(Zone2B_Owner_Var, "")
+	m_Value_Zone3 = m_Ctrl.AddVariable(Zone3_Owner_Var, "")
+
+	Do While True
+			Zone2A_Owner = m_Value_Zone2A.Value
+			Zone2B_Owner = m_Value_Zone2B.Value
+			Zone3_Owner = m_Value_Zone3.Value
+			Select Case Zone2A_Request
+			Case Zone_Owner_Part
+				If (Zone2A_Owner == Zone_Released) Then
+					m_Value_Zone2A.Value = Zone_Owner_Part
+					Zone2A_Owner = m_Value_Zone2A.Value
+				End If
+				Zone2A_Request = ""
+			Case Zone_Part_Release_Zone_2A
+				If (Zone2A_Owner == Zone_Owner_Part) Then
+					m_Value_Zone2A.Value = Zone_Released
+				End If
+				If (Zone2A_Owner == Zone_Unknown) Then
+					m_Value_Zone2A.Value = Zone_Released
+				End If
+				Zone2A_Owner = m_Value_Zone2A.Value
+				Zone2A_Request = ""
+			Case Else
+				 If (Len(Zone2A_Request) > 0 ) Then
+				 	Zone2A_Request = ""
+				 End If
+			End Select
+
+			Select Case Zone2B_Request
+			Case Zone_Owner_Part
+				If (Zone2B_Owner == Zone_Released) Then
+					m_Value_Zone2B.Value = Zone_Owner_Part
+					Zone2B_Owner = m_Value_Zone2B.Value
+				End If
+				Zone2B_Request = ""
+			Case Zone_Part_Release_Zone_2B
+				If (Zone2B_Owner == Zone_Owner_Part) Then
+					m_Value_Zone2B.Value = Zone_Released
+				End If
+				If (Zone2B_Owner == Zone_Unknown) Then
+					m_Value_Zone2B.Value = Zone_Released
+				End If
+				Zone2B_Owner = m_Value_Zone2B.Value
+				Zone2B_Request = ""
+			Case Else
+				 If (Len(Zone2B_Request) > 0 ) Then
+				 	Zone2B_Request = ""
+				 End If
+			End Select
+
+			Select Case Zone3_Request
+			Case Zone_Owner_Part
+				If (Zone3_Owner == Zone_Released) Then
+					m_Value_Zone3.Value = Zone_Owner_Part
+					Zone3_Owner = m_Value_Zone3.Value
+				End If
+				Zone3_Request = ""
+			Case Zone_Part_Release_Zone_3
+				If (Zone3_Owner == Zone_Owner_Part) Then
+					m_Value_Zone3.Value = Zone_Released
+				End If
+				If (Zone3_Owner == Zone_Unknown) Then
+					m_Value_Zone3.Value = Zone_Released
+				End If
+				Zone3_Owner = m_Value_Zone3.Value
+				Zone3_Request = ""
+			Case Else
+				 If (Len(Zone3_Request) > 0 ) Then
+				 	Zone3_Request = ""
+				 End If
+			End Select
+	Loop
+	m_Ctrl.Variables.Remove m_Value_Zone2A.Index
+	m_Ctrl.Variables.Remove m_Value_Zone2B.Index
+	m_Ctrl.Variables.Remove m_Value_Zone3.Index
+	cao.Controllers.Remove m_Ctrl.Index
+End Sub

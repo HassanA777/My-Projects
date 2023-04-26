@@ -1,0 +1,175 @@
+#include "globals.h"
+'!TITLE "Contec IO Interface program"
+Sub Main
+
+
+End Sub
+
+
+Sub IOConnect
+   Dim res As Integer
+   Dim ctrl As Object
+   res = 0
+'Establish (open) connection
+ctrl = Cao.AddController("DIO-1616RL-PE","CaoProv.CONTEC.DIO","","DeviceName=DIO000")
+' Need to add error checking.
+  ' IOConnect = res
+End Sub
+
+
+Function IOGetInput (InputIndex As Integer) As Integer
+   Dim ctrl As Object
+   Dim inputs As Integer
+   Dim input As Integer
+   Dim res As Integer
+   
+   If ((InputIndex >=16) And (InputIndex <=23)) Then 'Contect Card
+      inputs = IOGetInputs(1)
+	  input = 2^(InputIndex - 16)
+	  res = inputs And input
+   End If
+   If ((InputIndex >=24) And (InputIndex <=31)) Then 'Contec Card
+	  inputs = IOGetInputs(2)
+	  input = 2^(InputIndex - 24)
+	  res = inputs And input
+   End If
+	  If (res == input) Then
+	     res = 1
+	  Else
+	     res = 0
+	  End If
+   IOGetInput = res
+End Function
+
+'
+Function IOGetInputs( InputSet As Integer) As Integer
+   Dim ctrl As Object
+   Dim varIn0 As Object   'For variable object used to access the Input signals
+   Dim varIn8 As Object   'Second set of outputs
+   Dim res As Integer
+   res = 0
+'Establish (open) connection
+   ctrl = Cao.AddController("DIO-1616RL-PE","CaoProv.CONTEC.DIO","","DeviceName=DIO000")
+   If ((InputSet > 0) And (InputSet < 3)) Then
+     Select Case InputSet'
+	 	Case 1
+		varIn0 = ctrl.AddVariable("IN0", "Len=8") 
+		res = varIn0.Value
+		Case 2
+		varIn8 = ctrl.AddVariable("IN1", "Len=8") 
+		res = varIn8.Value
+        Case Else
+	 End Select
+   End If 
+   IOGetInputs = res
+   ctrl = Nothing
+End Function
+
+Function IOGetOutputs( OutputSet As Integer) As Integer
+   Dim ctrl As Object
+   Dim varOut0 As Object   'For variable object used to access the Input signals
+   Dim varOut8 As Object   'Second set of outputs
+   Dim res As Integer
+   res = 0
+'Establish (open) connection
+   ctrl = Cao.AddController("DIO-1616RL-PE","CaoProv.CONTEC.DIO","","DeviceName=DIO000")
+   If ((OutputSet > 0) And (OutputSet < 3)) Then
+     Select Case OutputSet'
+	 	Case 1
+		varOut0 = ctrl.AddVariable("OUT0", "Len=8") 
+		res = varOut0.Value
+		Case 2
+		varOut8 = ctrl.AddVariable("OUT1", "Len=8") 
+		res = varOut8.Value
+        Case Else
+	 End Select
+   End If 
+   IOGetOutputs = res
+   I[41] = res
+   ctrl = Nothing
+End Function
+
+Sub IOSetOutput(OutputIndex As Integer,State AS Integer ) 
+Dim ctrl As Object
+Dim varOut0 As Object
+Dim varOut1 As Object
+Dim bitItem As Integer
+Dim binStr As String
+Dim curState As Integer
+Dim Offset As Integer
+Dim val1 As Variant
+'Establish (open) connection
+I[42]= OutputIndex
+I[43]= State
+S[49]="Output Signal:" + Str(OutputIndex) + "State:" + Str(State)
+	If ((OutputIndex >=0) And (OutputIndex <=7)) Then 'User outputs (17 - 24)
+		bitItem = OutputIndex + 17
+		If (State = 1) Then
+		    SET IO[bitItem]
+		Else
+			Reset IO[bitItem]
+		End If
+	End If
+
+	If ((OutputIndex >=8) And (OutputIndex <=14)) Then 'User outputs (25 - 31).  We don't have the last signal 15
+		bitItem = OutputIndex + 17
+		If (State = 1) Then
+		    SET IO[bitItem]
+		Else
+			Reset IO[bitItem]
+		End If
+	End If
+	If ((OutputIndex >=16) And (OutputIndex <=23)) Then 'Contect Card
+		Offset = 16 'To make the starting bit as 0
+		bitItem = OutputIndex - Offset
+		val1 = IOGetOutputs(1)
+		binStr = Right(Bin(val1),8)
+		curState = Val(MID(binStr,8-bitItem,1))
+
+		If (State <> curState) Then 'Not same so need to be set
+		    If (State <> 0) Then
+		         val1 = val1 + (2^(OutputIndex - Offset))
+			Else
+		         val1 = val1 - (2^(OutputIndex - Offset))
+			End If
+			ctrl = Cao.AddController("DIO-1616RL-PE","CaoProv.CONTEC.DIO","","DeviceName=DIO000")
+	        varOut0 = ctrl.AddVariable("OUT0", "Len=8") 
+			'Set output
+            varOut0.Value = val1
+			ctrl = Nothing
+		End If
+	End If
+	If ((OutputIndex >=24) And (OutputIndex <=31)) Then 'Contec Card
+		Offset = 24 'To make the starting bit as 0
+		bitItem = OutputIndex - Offset
+		val1 = IOGetOutputs(2)  'Get latest state
+		binStr = Right(Bin(val1),8)
+		curState = Val(MID(binStr,8-bitItem,1))
+		If (State <> curState) Then 'Not same so need to be set
+		    If (State <> 0) Then
+		         val1 = val1 + (2^(OutputIndex - Offset))
+			Else
+		         val1 = val1 - (2^(OutputIndex - Offset))
+			End If
+			ctrl = Cao.AddController("DIO-1616RL-PE","CaoProv.CONTEC.DIO","","DeviceName=DIO000")
+            'Create variable object (Specify data size(8bit))
+	        varOut1 = ctrl.AddVariable("OUT1", "Len=8")
+			'Set output
+            varOut1.Value = val1
+			ctrl = Nothing
+		End If
+		val1 = IOGetOutputs(2)  'Get latest state
+		binStr = Right(Bin(val1),8)
+	End If
+
+End Sub
+Function IOSetOutputs(onOuput As Integer, offOuput As Integer) As String
+'This subroutine sets 1 output OFF and the other ON.
+	Dim retResult As String
+	retResult = Cmd_Pass
+
+
+	IOSetOutputs = retResult
+End Function
+
+

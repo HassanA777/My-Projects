@@ -1,0 +1,212 @@
+#include "globals.h"
+#include "DIO_TAB.h"
+#include "Contec_IO.pcs"
+#include "CmdUtil.pcs"
+#include "Commands.pcs"
+#include "Commands2.pcs"
+#include "RobotUtil.pcs"
+#include "RobotScrew.pcs"
+'!TITLE "Denso robot program"
+Sub Main
+Dim resResult As String
+Dim zoneResult As String
+Dim resp As String
+Call CmdRecovery
+If (LEN(CurCmdHeader) <> 0) THEN
+	resp = CurCmdHeader + "," + CurCmdPar1 + "," + CurCmdPar2 + ","+ CurCmdPar3 + ","+ CurCmdPar4 + ","+ CurCmdPar5 + "," + Str(Err.Number) + ": " + Err.Description 
+	Wait (Len(Response) == 0), 1000
+	'If ((Sysstate And 4) == 0) Then
+	Response = resp + "," + Str(ERR_NO_SERVO_POWER)
+	'End If
+	S[34] = "Robot Command Response: " + Response
+	CurCmdHeader = ""
+	CurCmdStatus = ""
+End If
+resResult = ""
+CurCmdHeader = ""
+CurCmdPar1 = ""
+CurCmdPar2 = ""
+CurCmdPar3 = ""
+CurCmdPar4 = ""
+CurCmdPar5 = ""
+CurCmdPar6 = ""
+CurCmdStatus = ""
+TAKEARM
+	WHILE TRUE
+	    If (Disable_Collision_Detection == 0) Then
+			CollisionDetection True,1 
+		Else
+			CollisionDetection False,1 
+		End If
+		Select Case S[30] 'Internal Robot Testing
+		Case "99"
+		    CurCmdHeader = Cmd_Set_Product
+			CurCmdPar1 = Product_P100
+			S[30] = ""
+
+		Case "97"
+		    CurCmdHeader = Cmd_Move_To_Point
+			CurCmdPar1 = "1"
+			CurCmdPar2 = "100"
+			S[30] = ""
+		Case "96"
+		    CurCmdHeader = Cmd_Move_To_Point
+			CurCmdPar1 = "2"
+			CurCmdPar2 = "100"
+			S[30] = ""
+        Case "95"
+		    S[33]=Str(Func_GripperID)
+			S[30] = ""
+		Case "1"
+		    CurCmdHeader = Cmd_Home
+			CurCmdPar1 = "0"
+			S[30] = ""
+		Case "2"
+			CurCmdHeader = Cmd_Gripper_Change
+			CurCmdPar1 = "1"
+			S[30] = ""
+		Case "3"
+			CurCmdHeader = Cmd_Gripper_Return
+			S[31] = "Starting gripper return"
+			CurCmdPar1 = "0"
+			S[30] = ""
+		Case "4" 'Move to point
+		    CurCmdHeader = Cmd_Get_Work
+			CurCmdPar1 = "4"
+			CurCmdPar2 = ""
+			S[30] = ""
+		Case "5" 'Get Work
+		    CurCmdHeader = Cmd_Get_Work
+			CurCmdPar1 = "5"
+			S[30] = ""
+		Case "6" 'Picture 2
+			S[30] = ""
+		Case "7" 'Pick Motherboard
+			CurCmdHeader = Cmd_Pick_Motherboard
+			CurCmdPar1 = "300"
+			CurCmdPar2 = ""
+			S[30] = ""
+		Case "8" 'Hold Montherboard
+			CurCmdHeader = Cmd_Hold_Motherboard
+			CurCmdPar1 = "300"
+			CurCmdPar2 = ""
+			S[30] = ""
+		Case "9" 'Release Motherboard
+			CurCmdHeader = Cmd_Release_Motherboard
+			CurCmdPar1 = "300"
+			S[30] = ""
+		Case "10" 'Initialize
+			CurCmdHeader = Cmd_Initialize
+			CurCmdPar1 = ""
+			S[30] = ""
+		Case "14" 'Remove Cover CPU
+			CurCmdHeader = Cmd_Remove_Cover_CPU
+			CurCmdPar1 = "200"
+			CurCmdPar2 = "1"
+			S[30] = ""
+		Case "15" 'Remove Cover CPU
+			CurCmdHeader = Cmd_Remove_Cover_CPU
+			CurCmdPar1 = "200"
+			CurCmdPar2 = "2"
+			S[30] = ""
+		Case "20" 'Index Conveyor
+			CurCmdHeader = Cmd_Index_Conveyor
+			CurCmdPar1 = ""
+			S[30] = ""
+		Case "21" 'Read Barcode
+			CurCmdHeader = Cmd_Barcode
+			CurCmdPar1 = ""
+			S[30] = ""
+		Case "31"
+			CurCmdHeader = Cmd_Gripper_Change
+			CurCmdPar1 = "1"
+			S[30] = ""
+		Case "33"
+			CurCmdHeader = Cmd_Gripper_Change
+			CurCmdPar1 = "3"
+			S[30] = ""
+		Case "34"
+			CurCmdHeader = Cmd_Gripper_Change
+			CurCmdPar1 = "4"
+			S[30] = ""
+		Case "36"
+			CurCmdHeader = Cmd_Gripper_Change
+			CurCmdPar1 = "6"
+			S[30] = ""
+		Case Else
+		    If S[30] <> "" Then
+		'	  S[30] = ""
+			End If
+		End Select
+		IF ((LEN(CurCmdStatus)==0) AND (LEN(CurCmdHeader) > 0) ) THEN
+		   resResult = RobCommand
+		ElseIf (LEN(CurCmdHeader) > 0) Then
+			S[94] = "Current Robot Command: " +  CurCmdHeader
+		Else
+
+		End If
+	WEND	
+End Sub
+
+Function RobCommand() As String
+Dim resResult As String
+Dim gripNumber As Integer
+Dim posNumber As Integer
+Dim palNumber As Integer
+Dim rowNumber As Integer
+resResult = ""
+
+        S[93] = "RobCommand = " + CurCmdHeader
+        ExtSpeed PendantSpeed
+		Select Case CurCmdHeader
+		Case Cmd_Set_Product
+			CurCmdStatus = Func_Set_Product()
+		Case Cmd_Home
+			CurCmdStatus = Func_Home()
+		Case Cmd_Initialize
+		    CurCmdStatus = Func_Initialize
+		Case Cmd_Gripper_Change
+		    CurCmdStatus = Func_Gripper_Change()
+		Case Cmd_Gripper_Return
+			CurCmdStatus = Func_Gripper_Return(GripReturn_Home)
+		Case Cmd_Move_To_Point
+		    CurCmdStatus = Func_Move_To_Point
+		Case Cmd_Get_Work
+		    CurCmdStatus = Func_Get_Work
+		Case Cmd_Pick_Motherboard
+			CurCmdStatus = Func_Pick_Motherboard
+		Case Cmd_Hold_Motherboard
+			CurCmdStatus = Func_Hold_Motherboard
+		Case Cmd_Release_Motherboard
+			CurCmdStatus = Func_Release_Motherboard
+		Case Cmd_Pick_DimmCard
+			CurCmdStatus = Func_Pick_DimmCard(CurCmdPar1, CurCmdPar2)
+		Case Cmd_Place_DimmCard
+			CurCmdStatus = Func_Place_DimmCard(CurCmdPar1, CurCmdPar2, CurCmdPar3, CurCmdPar4)
+		Case Cmd_Pick_N_Place_DimmCard
+			CurCmdStatus = Func_Pick_N_Place_DimmCard
+		Case Cmd_Pick_CPU
+			CurCmdStatus = Func_Pick_CPU
+		Case Cmd_Place_CPU
+			CurCmdStatus = Func_Place_CPU
+		Case Cmd_Pick_HeatSinks
+			CurCmdStatus = Func_Pick_HeatSinks
+		Case Cmd_Hold_HeatSinks
+			CurCmdStatus = Func_Hold_HeatSinks
+		Case Cmd_Release_HeatSinks
+			CurCmdStatus = Func_Release_HeatSinks
+		Case Cmd_Place_HeatSinks
+			CurCmdStatus = Func_Place_HeatSinks
+		Case Cmd_Remove_Cover_CPU
+			CurCmdStatus = Func_Remove_Cover_CPU
+		Case Cmd_Index_Conveyor
+			CurCmdStatus = Func_Index_Conveyor
+		Case Cmd_Barcode
+			CurCmdStatus = Func_Get_Barcode
+		Case Cmd_Gripper_Status
+		    CurCmdStatus = Func_Gripper_Status
+		Case Else
+            CurCmdStatus = Str(ERR_INVALID_CMD)
+			S[93] = S[93] + " didn't recognize command"
+		End Select
+End Function

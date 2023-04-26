@@ -1,0 +1,15 @@
+#include "globals.h"
+#include "CmdUtil.pcs"
+'!TITLE "Denso robot program"
+
+Sub Main
+	'This program monitors the systate variable
+	'and executes a clrerr when the door interlock is opened
+	'Looking for robot failure (bit 2) and robot warning (bit 8)
+'	TowerLight_BlinkingTimer = Timer
+'	WHILE TRUE
+ '		Call LightControl() 
+'		Delay 5 
+'	WEND
+
+End Sub

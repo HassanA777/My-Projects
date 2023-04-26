@@ -1,0 +1,193 @@
+'Grasp Routine (CATCH_POINT)
+
+WINDOW 80,120,480,380
+TITLE "Grasp Routine"
+GACTIVE 1
+
+'------------------------
+'Define Valiable 変数定義
+'------------------------
+V1$  = ""		'Vision Status
+V2$  = ""		'Task ID
+V3$  = ""		'Pallet Empty Information
+V4$  = ""		'Number of Gras Candidates
+V5$  = ""		'Work Evaluation Value
+V6$  = ""		'Grasp Information ID
+V7$  = ""		'X Work Position
+V8$  = ""		'Y Work Position
+V9$  = ""		'Z Work Position
+V10$  = ""		'Rx Work Position
+V11$  = ""		'Ry Work Position
+V12$  = ""		'Rz Work Position
+V13$  = ""		'Occlusion Ratio
+V14$  = ""		'# of 3D Measurement Points
+V15$  = ""		'Local High Position X
+V16$  = ""		'Local High Position Y
+V17$  = ""		'Local High Position Z
+V313% = 0		'String Parsing Counter
+'------------------------
+*Main
+'------------------------
+
+
+'------------------------
+*init'Socket communication ｿｹｯﾄ通信
+'------------------------
+' Create Socket		Socket number[1-16],TCP/UDP[TCP→0,UDP→1]
+SOCKCREATE 2,0
+IF E1%<0 THEN *ERROR
+V310%=1
+' Connect Socket	Socket number[1-16],Vision IP address,Port,Time out
+SOCKCONNECT 2,100,8889,10
+IF E1%<0 THEN *ERROR
+V310%=2
+
+'------------------------
+*Pose_Work
+'------------------------
+V20$ = "POSE_WORK,"+STR$(V102%)
+SOCKSENDSTR 2,V20$,LEN(V20$),0,V105%,0
+V310%=4
+GOSUB *Data_read
+
+PRINT #0,"Move To Approach position Press [Enter]"
+PRINT #0," "
+GOSUB *KEY_DOWN
+V100!=SYSTEM!(810)
+V101!=SYSTEM!(811)
+V102!=SYSTEM!(812)
+V103!=SYSTEM!(815)
+V104!=SYSTEM!(814)
+V105!=SYSTEM!(813)
+CLS
+PRINT #0,"Move To Gripping Position Press [Enter]"
+PRINT #0," "
+GOSUB *KEY_DOWN
+V106!=SYSTEM!(810)
+V107!=SYSTEM!(811)
+V108!=SYSTEM!(812)
+V109!=SYSTEM!(815)
+V110!=SYSTEM!(814)
+V111!=SYSTEM!(813)
+V20$=""
+V20$ = "CATCH_POINT,"+STR$(V102%)+","+STR$(V103%)+",0,0,0,0,0,0,"+STR$(V100!)+","+STR$(V101!)+","+STR$(V102!)+","+STR$(V103!)+","+STR$(V104!)+","+STR$(V105!)+","+STR$(V106!)+","+STR$(V107!)+","+STR$(V108!)+","+STR$(V109!)+","+STR$(V110!)+","+STR$(V111!)
+SOCKSENDSTR 2,V20$,LEN(V20$),0,V105%,0
+PRINT #0,V20$
+PRINT #0," "
+GOSUB *Data_read
+PRINT #0,"OK"
+PRINT #0," "
+GOSUB *KEY_DOWN
+PRINT #0,"Press [Enter]"
+PRINT #0," "
+GOTO *EndSocket
+
+
+
+
+
+
+'------------------------
+*Data_read
+'------------------------
+V49$ = ""
+V50$ = ""
+
+'------------------------
+*GETDATA
+'------------------------
+SOCKRECV 2,1,1,0,V311%
+IF (E1% < 0)
+GOTO *ERROR
+ENDIF
+GETBYTE 1,V312%,0
+V50$=V50$+CHR$(V312%)
+IF V312%=10 THEN *GETDATAEND	'Check For Line Feed
+IF V312%=44 THEN *SETVALUE		'Check For Line Comma
+V49$=V49$+CHR$(V312%)
+V50$=V50$+CHR$(V312%)
+V310%=5
+GOTO *GETDATA
+
+'------------------------
+*SETVALUE
+'------------------------
+V$[1+V313%]=V49$
+V313%=V313%+1
+V49$=""
+V310%=6
+GOTO *GETDATA
+
+'------------------------
+*GETDATAEND
+'------------------------
+V$[1+V313%]=V49$
+V310%=8
+
+V319% = VAL(V1$)	'Vision Status (0 is OK)
+V320% = VAL(V2$)	'Task ID 
+V321% = VAL(V3$)	'Pallet Empty Information (0:Empty, 1:Not Empty)
+V322% = VAL(V4$)	'Grasp Information  (0:No Candidate, 1:Candidate Present)
+V323% = VAL(V5$)	'Work Evaluation Value
+V324% = VAL(V6$)	'Grasp Information ID 
+V325! = VAL(V7$)	'X Work Position
+V326! = VAL(V8$)	'Y Work Position
+V327! = VAL(V9$)	'Z Work Position
+V328! = VAL(V10$)	'Rx Work Position
+V329! = VAL(V11$)	'Ry Work Position
+V330! = VAL(V12$)	'Rz Work Position
+V331% = VAL(V13$)	'Occlusion Ratio
+V332% = VAL(V14$)	'# of 3D Measurement Points
+V333! = VAL(V15$)	'Local High Position X
+V334! = VAL(V16$)	'Local High Position Y
+V335! = VAL(V17$)	'Local High Position Z
+V313% = 0		'String Parsing Counter
+
+IF V319%<>0 THEN *CAMERA_ERROR	'Check Camera Status
+RETURN
+
+'------------------------
+*EndSocket' End socket communicationｿｹｯﾄ通信終了
+'------------------------
+SOCKCLOSE 1
+SOCKCLOSE 2
+Exit
+
+
+'------------------------
+*ERROR
+'------------------------
+PRINT #0,"Socket Fault"
+PRINT #0,STR$(E1%)
+PRINT #0,STR$(E2%)
+PRINT #0,"Press [Enter]"
+PRINT #0," "
+GOSUB *KEY_DOWN
+GOTO *EndSocket
+
+'------------------------
+*CAMERA_ERROR
+'------------------------
+PRINTF #0,"Camera Error Code %d",V319%
+PRINT #0,"Press [Enter]"
+PRINT #0," "
+GOSUB *KEY_DOWN
+GOTO *EndSocket
+
+'---------------
+'Key Press Decision
+'---------------
+*KEY_DOWN
+L11% = &H0D
+*Loop_KEY_DOWN
+L10$ = GETKEY$(0)
+L10% = ORD(L10$)
+PAUSE 100
+IF (&H0D = L10% AND &H0D <> L11%)	'Check For Carriage Return
+RETURN
+ELSEIF(&H52 =L10%)					'Check For R Key
+EXIT
+ELSE
+L11% = L10%
+GOTO *Loop_KEY_DOWN
+ENDIF

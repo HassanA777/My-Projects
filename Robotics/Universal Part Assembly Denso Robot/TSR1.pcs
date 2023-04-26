@@ -1,0 +1,16 @@
+#include "globals.h"
+
+#include "RobotScrew.pcs"
+
+'!TITLE "Denso robot program"
+Sub Main
+	DEFINT cycling = 1
+	DEFDBL cycleTime = 0
+'Command = ""
+
+	WHILE TRUE
+
+		Call CmdRobot()
+
+	WEND
+End Sub

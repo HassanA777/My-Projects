@@ -1,0 +1,627 @@
+#include "globals.h"
+#include "DIO_TAB.h"
+#include "CmdUtil.pcs"
+#include "RobotScrew.pcs"
+#include "Contec_IO.pcs"
+'!TITLE "Denso robot program"
+'Funct_Zone_Control() As String
+'Func_Calculate_Work(W_Number As Integer,X_Offset_1 As Float, Y_Offset_1 As Float,X_Offset_2 As Float, Y_Offset_2 As Float) As String
+'Func_Current_Zone() As String
+'Gripper(action As String) As Integer
+'
+Sub Main
+Dim strResult As String
+Dim loc As Position
+Dim locnew As Position
+Dim locoffset As Position
+Dim locJoint As Joint
+TakeArm Keep = 0
+ChangeWork 0
+
+loc = WorkPos(3)
+
+locnew = WorkPos(3)
+locJoint = P2J(locnew)
+Work 3, loc
+CHANGEWORK WorkFrame_Area2_Chassis
+locoffset = J2P(locJoint)
+End Sub
+
+Function Get_Zone2AOLD(Zone_Requester As String) As String
+Dim strResult As String
+Dim timeout As Float
+strResult = ""
+'Area 2 Assembly 
+		timeout = Timer
+		Do 
+		'	strResult = Set_ZoneOLD(Zone_2)
+			If (strResult == Zone_Owner_Part) Then
+			'	strResult = ""
+			Else
+				If ((Timer - timeout) > Zone_Req_Timeout) Then
+					strResult = Str(ERR_PARTROBOT_REQ_ZONE2A)
+				Else 
+					strResult = ""
+				End If
+			End If
+		Loop Until (Len(strResult) > 0)
+Get_Zone2AOLD = strResult
+End Function
+
+Function Release_Zone2AOLD(Zone_Requester As String) As String
+Dim strResult As String
+Dim timeout As Float
+timeout = Timer
+'Do
+'	strResult = Release_Zone(Zone_2)
+'	If (strResult == Zone_Requester) Then
+	   strResult = ""
+'	End If
+'	If ((Timer - timeout) > Zone_Req_Timeout) Then
+'	    strResult = Str(ERR_ZONE_CONTROL_FAILED)
+'	End If
+'Loop Until (Len(strResult) > 0) 
+strResult = Cmd_Pass
+Release_Zone2AOLD = strResult
+End Function
+
+Function Get_Zone2BOLD(Zone_Requester As String) As String
+Dim strResult As String
+Dim timeout As Float
+strResult = ""
+timeout = Timer
+Do
+'	strResult = Set_ZoneOLD(Zone_2B)
+	If (strResult == Zone_Owner_Part) Then
+	'	strResult = ""
+	Else
+		If ((Timer - timeout) > Zone_Req_Timeout) Then
+			strResult = Str(ERR_PARTROBOT_REQ_ZONE2B)
+		Else 
+			strResult = ""
+		End If
+	End If
+Loop Until (Len(strResult) > 0) 
+Get_Zone2BOLD = strResult
+End Function
+
+Function Release_Zone2BOLD(Zone_Requester As String) As String
+Dim strResult As String
+Dim timeout As Float
+'timeout = Timer
+'Do
+'	strResult = Release_Zone(Zone_2B)
+'	If (strResult == Zone_Requester) Then
+'	   strResult = ""
+'	End If
+'	If ((Timer - timeout) > Zone_Req_Timeout) Then
+'	    strResult = Str(ERR_ZONE_CONTROL_FAILED)
+'	End If
+'Loop Until (Len(strResult) > 0)
+strResult = Cmd_Pass
+Release_Zone2BOLD = strResult
+
+End Function
+
+Function Get_Zone3OLD(Zone_Requester As String) As String
+Dim strResult As String
+Dim timeout As Float
+strResult = ""
+timeout = Timer
+Do
+'	strResult = Set_ZoneOLD(Zone_3)
+	If (strResult == Zone_Owner_Part) Then
+	'	strResult = ""
+	Else
+		If ((Timer - timeout) > Zone_Req_Timeout) Then
+			strResult = Str(ERR_PARTROBOT_REQ_ZONE3)
+		Else 
+			strResult = ""
+		End If
+	End If
+Loop Until (Len(strResult) > 0) 
+Get_Zone3OLD = strResult
+End Function
+
+
+Function Release_Zone3OLD(Zone_Requester As String) As String
+Dim strResult As String
+Dim timeout As Float
+strResult = ""
+'timeout = Timer
+'Do
+'strResult = Release_Zone(Zone_3)
+'If (strResult == Zone_Requester) Then
+'   strResult = ""
+'End If
+'If ((Timer - timeout) > Zone_Req_Timeout) Then
+'    strResult = Str(ERR_ZONE_CONTROL_FAILED)
+'End If
+'Loop Until (Len(strResult) > 0) 
+strResult = Cmd_Pass
+Release_Zone3OLD = strResult
+End Function
+
+Function Func_Calculate_Work(W_Number As Integer,X_Offset_1 As Float, Y_Offset_1 As Float,X_Offset_2 As Float, Y_Offset_2 As Float) As String
+Dim strResult As String
+Dim workLoc As Position
+Dim workPosition As Integer
+
+'Get golden work
+strResult = Calculate_Work(1,W_Number, 0, 0, 0, 0)
+If (strResult == Cmd_Pass) Then
+	strResult = ""
+    workPosition = LOC_Golden_W1 + W_Number - 1
+    P[workPosition] = WORKPOS(W_Number)	
+	strResult = Calculate_Work(0,W_Number,X_Offset_1, Y_Offset_1,X_Offset_2, Y_Offset_2)
+End If
+
+Func_Calculate_Work = strResult
+End Function
+Function Calculate_Work(Golden As Integer, W_Number As Integer,X_Offset_1 As Float, Y_Offset_1 As Float,X_Offset_2 As Float, Y_Offset_2 As Float) As String
+'  Work has been defined once using EasyEdit once so the RX and RY will be reused.
+'  This function only calculate new origin and RZ
+'
+Dim posWorkOrigin As Position
+Dim posWorkNew As Position
+Dim posWorkCam As Position
+Dim camTool As Position
+Dim pos1Shifted As Position
+Dim pos1 As Position
+Dim pos2 As Position
+Dim tempLoc As Position
+Dim startingPos As Integer
+Dim workNumberPos AS Integer
+Dim posNumber1 As Integer
+Dim posNumber2 As Integer
+Dim xValue1 As Float
+Dim yValue1 As Float
+Dim xValue2 As Float
+Dim yValue2 As Float
+Dim dx As Float
+Dim dy As Float
+Dim newAngle As Float
+Dim originalAngle As Float
+Dim diffAngle As Float
+Dim strResult As String
+strResult = ""
+	CHANGETOOL 0
+	CHANGEWORK 0
+
+'
+'			|
+'		3	|   4
+'      ----------+Y
+'			|
+'      	2	|	1
+'			+X
+'
+' LOC_Golden_W1 I201
+' LOC_Golden_W2 I202
+' LOC_Golden_W3 I203
+' LOC_Golden_W4 I204
+' LOC_Golden_W5 I205
+' LOC_Golden_W6 I206
+' LOC_Golden_W7 I207
+
+' LOC_W1Fid1 I211
+' LOC_W1Fid2 I212
+' LOC_W1Fid3 I213 ' This is a non-vision location
+If ((W_Number > 0) And (W_Number < 8)) Then
+    originalAngle = PosRZ(P[LOC_Golden_W1 + W_Number - 1])
+    camTool = ToolPos(3)'Camera
+	LetZ camTool = 0
+	LetRX camTool = 0
+	LetRY camTool = 0
+	LetRZ camTool = 0
+	startingPos = LOC_W1Fid1 'This contains the GOLDEN position number of Fid 1
+	posNumber1 = startingPos + ((W_Number - 1) * 3)
+	posNumber2 = posNumber1 + 1
+	pos1 = P[posNumber1] + (PosX(camTool),PosY(camTool))H
+	pos2 = P[posNumber2] + (PosX(camTool),PosY(camTool))H
+
+	xValue1 = PosX(pos1) + X_Offset_1
+	yValue1 = PosY(pos1) + Y_Offset_1
+	xValue2 = PosX(pos2) + X_Offset_2
+	yValue2 = PosY(pos2) + Y_Offset_2
+
+	dx = xValue2 - xValue1
+	dy = yValue2 - yValue1
+	If (dx = 0) Then
+		If (dy = 0) Then
+			'Invalid data
+		ElseIf (dy > 0) Then
+		    ' along the +Y-Axis
+			newAngle = 90
+		Else 'dy < 0
+			' along the -Y-Axis
+			newAngle = -90
+		End If 
+	ElseIf (dx > 0) Then
+		If (dy = 0) Then
+			' Along the +X-Axis of base
+			newAngle = 0
+		Else
+			' Quad 1 and 2
+			newAngle = Atn(dy/dx)
+		End If
+	Else 'dx < 0
+		If (dy = 0) Then
+			' Along the +X-Axis of base
+			If (originalAngle < 0) Then
+			    newAngle = -180
+			Else
+			    newAngle = 180
+			End If
+		ElseIf (dy > 0) Then
+			If (Golden == 0) Then
+		    ' Quad 4
+				If (originalAngle < 0) Then
+					newAngle = Atn(dy/dx) - 180 '
+				Else
+            	   newAngle = 180 + Atn(dy/dx)
+				End If
+			Else
+            	newAngle = 180 + Atn(dy/dx)
+			End If
+		Else 'dy < 0
+			If (Golden == 0) Then
+				' Quad 3
+				If (originalAngle < 0) Then
+					newAngle = Atn(dy/dx) - 180 '
+				Else
+					newAngle = 180 + Atn(dy/dx)
+				End If
+			Else
+				newAngle = Atn(dy/dx) - 180 '
+			End If
+		End If
+	End If
+'Transfer back to tool flange
+	If (Golden == 0) Then
+		diffAngle = newAngle - originalAngle 'New Work offset
+	Else
+		diffAngle = 0  'Golden Work
+	End If
+	pos1Shifted = pos1
+	LetX pos1Shifted = xValue1
+	LetY pos1Shifted = yValue1
+	tempLoc = pos1Shifted
+	LetRZ tempLoc = PosRZ(pos1Shifted) + diffAngle 'RZ(W) is up and RZ of pos1 is down
+	pos1 = tempLoc + (-PosX(camTool),-PosY(camTool))H 'New pos1
+
+'Take X and Y and new angle
+	posWorkOrigin = WORKPOS(W_Number)
+	posWorknew = posWorkOrigin
+	LetX posWorkNew = PosX(pos1)
+	LetY posWorkNew = PosY(pos1)
+	LetRZ posWorkNew = newAngle
+	Work W_Number, posWorkNew
+	strResult = Cmd_Pass
+Else
+	'Invalid work number
+	strResult = Str(ERR_INVALID_WORKSPACE)
+End If
+Calculate_Work = strResult
+End Function
+
+Function Func_Current_Zone() As String
+'
+DEFINT res = 0
+Dim strResult As String
+Dim lastWork As Integer
+Dim lastTool As Integer
+Dim locJoint As Joint
+TakeArm 0
+ChangeTool 0
+ChangeWork 0
+locJoint = CurJnt
+If (Joint(1,locJoint) > 90) Then
+	strResult = Zone_C
+ElseIf ((Joint(1,locJoint) >= 0) And (Joint(1,locJoint) <= 90))  Then
+	strResult = Zone_B
+ElseIf ((Joint(1,locJoint) <= 0) And (Joint(1,locJoint) >= -90))  Then
+	strResult = Zone_2
+Else 
+	strResult = Zone_3
+End If
+
+Func_Current_Zone = strResult
+End Function
+Function Func_Move_To_Zone(destZone As String) As String
+Dim strResult As String
+Dim curZone As String
+Dim loc As Position
+Dim safeLoc As Position
+Dim destLoc As Position
+strResult = Cmd_Pass
+
+' LOCJ_Home_AreaB 1
+' LOCJ_Home_Area2 2
+' LOCJ_Home_Area3 3
+curZone = Func_Current_Zone
+   Select Case curZone
+   Case Zone_B 'Current
+
+      safeLoc = J2P(J[LOCJ_Home_AreaB])
+      Select Case destZone
+	  Case Zone_B  'Destination:  Parts zone
+	     S[37] = "Current Zone_B, Dest Zone_B"
+         'Same zone
+		 'Move up to safe Z
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) > 50) Then
+		     Move P, @5 J[LOCJ_Home_AreaB]
+		 End If
+		 strResult = Zone_B
+	  Case Zone_C  'Destination:  Nest zone
+	  S[37] = "Current Zone_B, Dest Zone_C"
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next	
+		 'move to safe
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) > 50) Then
+		     Move P, @5 J[LOCJ_Home_AreaB]
+		 End If
+		 strResult = Zone_B
+		 'Can go any nest from here
+	  Case Zone_2  'Destination:  Assembly zone
+	  S[37] = "Current Zone_B, Dest Zone_2"
+		 'loc = CurPos 
+		' LetZ loc = PosZ(safeLoc) ' Move to home of the current zone
+		 'Move L, @P loc
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_AreaB])) > 50) Then
+		     Move P, @5 J[LOCJ_Home_AreaB]
+		 End If
+		 Move P, @5 J[LOCJ_Home_Area2]
+		 strResult = Zone_2
+		 'Can go any where in zone 2 from here
+	  Case Zone_3  'Destination:  Screw zone
+	  S[37] = "Current Zone_B, Dest Zone_3"
+		 'loc = CurPos 
+		 'LetZ loc = PosZ(safeLoc) ' Move to home of the current zone
+		 'Move L, @10 loc
+		 Move P, @5 safeLoc
+		 Move P, @5 J[LOCJ_Home_Area2]
+		 Move P, @5 J[LOCJ_Home_Area3]
+		 strResult = Zone_3
+		 'Can go any where in zone 2 from here
+	  Case Else
+	  S[37] = "Current Zone_B, Dest Fail"
+	     strResult = Cmd_Fail
+	  End Select
+   Case Zone_C 'Current
+   S[37] = "Current Zone_C, Dest Zone_B"
+		'strResult = Cmd_Fail  'Does not support this for now.
+      If (0 == Func_GripperID) Then
+	    Select Case destZone
+	    Case Zone_B  'Destination:  Parts zone
+			Move P, @P J[LOCJ_Home_AreaB], Next 
+	    Case Zone_C  'Destination:  Nest zone
+
+		Case Zone_2  'Destination:  Assembly zone
+			Move P, @P J[LOCJ_Home_AreaB], Next 
+			Move P, @P J[LOCJ_Home_Area2], Next
+		Case Zone_3  'Destination:  Screw  zone
+			Move P, @P J[LOCJ_Home_AreaB], Next 
+			Move P, @P J[LOCJ_Home_Area2], Next
+			Move P, @P J[LOCJ_Home_Area3], Next
+	  Case Else
+	     strResult = Cmd_Fail
+		    S[37] = "Current Zone_C, Dest Fail"
+	  End Select
+      Else
+          strResult = Cmd_Fail
+          S[36] = "Unknown gripper id"
+	  End If
+
+   Case Zone_2 'Current
+      safeLoc = J2P(J[LOCJ_Home_Area2])
+      Select Case destZone
+	  Case Zone_B  'Destination:  Parts zone
+	     S[37] = "Current Zone_2, Dest Zone_B"
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next	
+			'Move to zone 2 safe
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_Area2])) > 100) Then
+		  '   Move P, @P J[LOCJ_Home_Area2], Next
+		 End If
+		 'move to destination zone safe
+		 Move P, @P J[LOCJ_Home_AreaB], Next         
+		 strResult = Zone_B
+	  Case Zone_C  'Destination:  Nest zone
+	  	 S[37] = "Current Zone_2, Dest Zone_C"
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next	
+			'Move to zone 2 safe
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_Area2])) > 100) Then
+		     Move P, @P J[LOCJ_Home_Area2], Next
+		 End If
+		 'move to destination zone safe
+		 Move P, @P J[LOCJ_Home_AreaB], Next         
+		 strResult = Zone_B
+	  Case Zone_2  'Destination:  Assembly zone
+	  	  S[37] = "Current Zone_2, Dest Zone_2"
+         'Same zone
+         'Move up to safe Z
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_Area2])) > 100) Then
+		     Move P, @P J[LOCJ_Home_Area2], Next
+		 End If
+		  strResult = Zone_2
+	  Case Zone_3  'Destination:  Screw zone
+	  	  S[37] = "Current Zone_2, Dest Zone_3"
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next	
+			'Move to destination zone
+		 Move P, @P J[LOCJ_Home_Area3],Next 
+		 strResult = Zone_3
+	  Case Else
+	     strResult = Cmd_Fail
+		 S[37] = "Current Zone_2, Dest Fail"
+	  End Select
+   Case Zone_3 'Current
+      safeLoc = J2P(J[LOCJ_Home_Area3])
+      Select Case destZone
+	  Case Zone_B  'Destination:  Parts zone
+	  	 S[37] = "Current Zone_3, Dest Zone_B"
+	  	 ChangeTool 0
+		 ChangeWork 0
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next
+		 If ((Dist(CurPos,J2P(J[LOCJ_Home_Area3])) < Dist(CurPos,P[LOC_W4Fid2])) Or (Dist(CurPos,J2P(J[LOCJ_Home_Area3])) < Dist(CurPos,P[LOC_W3Fid2]))) Then
+		 		Move P, @P J[LOCJ_Home_Area3], Next
+		 End If
+		 Move P, @P J[LOCJ_Home_Area2], Next
+		 'move to destination zone safe
+		 Move P, @P J[LOCJ_Home_AreaB], Next      
+		 strResult = Zone_B
+	  Case Zone_C  'Destination:  Nest zone
+	  	 S[37] = "Current Zone_3, Dest Zone_C"
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next	
+		 If ((Dist(CurPos,J2P(J[LOCJ_Home_Area3])) < Dist(CurPos,P[LOC_W4Fid2])) Or (Dist(CurPos,J2P(J[LOCJ_Home_Area3])) < Dist(CurPos,P[LOC_W3Fid2]))) Then
+		 		Move P, @10 J[LOCJ_Home_Area3], Next
+		 End If
+		 Move P, @P J[LOCJ_Home_Area2], Next
+		 Move P, @P J[LOCJ_Home_AreaB], Next         
+		 strResult = Zone_B
+	  Case Zone_2  'Destination:  Assembly zone
+	  	 S[37] = "Current Zone_3, Dest Zone_2"
+         'Z up to safe
+		 'loc = CurPos
+		 'LetZ loc = PosZ(safeLoc)
+		 'Move L, @P loc, Next	
+		 If ((Dist(CurPos,J2P(J[LOCJ_Home_Area3])) < Dist(CurPos,P[LOC_W4Fid2])) Or (Dist(CurPos,J2P(J[LOCJ_Home_Area3])) < Dist(CurPos,P[LOC_W3Fid2]))) Then
+		 		Move P, @10 J[LOCJ_Home_Area3], Next
+		 End If
+		 Move P, @P J[LOCJ_Home_Area2], Next      
+		 strResult = Zone_2
+	  Case Zone_3  'Destination:  Screw zone
+	  	 S[37] = "Current Zone_3, Dest Zone_3"
+         'Move up to safe Z
+		 'loc = CurPos
+		 'LetZ loc = PosZ(J2P(J[LOCJ_Home_Area3]))
+		 'Move L, @P loc, Next
+		 If (Dist(CurPos, J2P(J[LOCJ_Home_Area3])) > 100) Then
+		     Move P, @P J[LOCJ_Home_Area3]
+		 End If
+		 strResult = Zone_3
+		 'Can go any where in zone 3 from here
+	  Case Else
+	     strResult = Cmd_Fail
+		 S[36] = "current zone 3:Unknown zone"
+	  End Select
+
+   Case Else
+   S[36] = "Unknown zone"
+       strResult = Cmd_Fail
+   End Select
+Func_Move_To_Zone = strResult
+End Function
+
+Function Gripper(action As String) As Integer
+Dim res As Integer
+res = 0
+Select Case action
+Case Grip_Open
+     ReSet IO[outGripClose]
+	 Set IO[outGripCloseRet]
+	 Set IO[outGripOpen]
+	 ReSet IO[outGripOpenRet]
+	 If (ToolID_CPU == Func_GripperID) Then
+		 If (Sim_CPU_Gripper_Sensors == 0) Then
+		 	Wait IO[inGripDummyNVacPres], IOPneumaticTimeout
+		 Else
+			Delay Sim_CPU_Gripper_Delay
+		 End If
+	 Else
+		Wait IO[inGripDummyNVacPres], IOPneumaticTimeout
+	 End If
+Case Grip_Close
+     Set IO[outGripClose]
+	 ReSet IO[outGripCloseRet]
+	 ReSet IO[outGripOpen]
+	 Set IO[outGripOpenRet]
+	 If (ToolID_CPU == Func_GripperID) Then
+		 If (Sim_CPU_Gripper_Sensors == 0) Then
+		 	Wait ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres])), IOPneumaticTimeout
+		 Else
+			Delay Sim_CPU_Gripper_Delay
+		 End If
+	 Else
+		Wait ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres])), IOPneumaticTimeout
+	 End If
+Case Grip_Close_CPU
+     Set IO[outGripClose]
+	 ReSet IO[outGripCloseRet]
+	 ReSet IO[outGripOpen]
+	 Set IO[outGripOpenRet]
+	 If (ToolID_CPU == Func_GripperID) Then
+		 If (Sim_CPU_Gripper_Sensors == 0) Then
+		 	Wait ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres])), IOPneumaticTimeout
+		 Else
+			Delay Sim_CPU_Gripper_Delay
+		 End If
+	 Else
+		Wait ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres])), IOPneumaticTimeout
+	 End If
+Case Grip_Close_Cover
+     Set IO[outGripClose]
+	 ReSet IO[outGripCloseRet]
+	 ReSet IO[outGripOpen]
+	 Set IO[outGripOpenRet]
+	 If (ToolID_CPU == Func_GripperID) Then
+		 If (Sim_CPU_Gripper_Sensors == 0) Then
+		 	Wait ((IO[inGripDummyNVacPres]) And (Not IO[inGripCPUClosed])), IOPneumaticTimeout
+		 Else
+			Delay Sim_CPU_Gripper_Delay
+		 End If
+	 Else
+		Wait ((IO[inGripCPUClosed]) And Not (IO[inGripDummyNVacPres])), IOPneumaticTimeout
+	 End If
+Case Grip_ToolPick
+	 Reset IO[outChangerUClmp]
+	 Set IO[outChangerClamp]
+	 Delay 1000
+	 Wait IO[inToolConnected], 10000
+Case Grip_ToolRelease
+     ReSet IO[outGripClose]
+	 Set IO[outGripCloseRet]
+	 ReSet IO[outGripOpen]
+	 Set IO[outGripOpenRet]
+	 Set IO[outChangerUClmp]
+	 Reset IO[outChangerClamp]
+	 Delay 500
+	 Wait Not IO[inToolConnected], 500	
+Case Else
+     res = ERR_WRONG_GRIP_CMD
+End Select
+Gripper = res
+End Function
+Function Motion_Complete_Distance(Distance As Float,Timeout As Float) As String
+Dim timestart As Float
+timestart = Timer
+If (Timeout <= 0) Then
+   Timeout = 100000
+End If
+Do While ((Dist(CurPos,DestPos) > Distance) Or ((Timer - timestart) > Timeout))
+	Delay 100
+Loop
+Motion_Complete_Distance = ""
+End Function

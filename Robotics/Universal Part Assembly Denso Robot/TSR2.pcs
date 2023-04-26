@@ -1,0 +1,31 @@
+#include "globals.h"
+#include "CmdUtil.pcs"
+#include "RobotScrew.pcs"
+'!TITLE "Denso robot program"
+
+Sub Main
+Response = ""
+CmdHeader = ""
+CmdPar1 = ""
+CmdPar2 = ""
+CmdPar3 = ""
+CmdPar4 = ""
+CmdPar5 = ""
+CmdPar6 = ""
+CmdStatus = ""
+
+
+	'This program monitors the systate variable
+	'and executes a clrerr when the door interlock is opened
+	'Looking for robot failure (bit 2) and robot warning (bit 8)
+	WHILE TRUE
+		IF ((LEN(Command) > 0) AND ((LEN(CmdHeader) <> 0) OR (LEN(Response) <> 0))) THEN
+    		S[96] = Command + " : " + CmdHeader + " : " + Response
+		End If
+		IF ((LEN(Command)>0) AND (LEN(Response)==0) AND (LEN(CmdHeader) == 0) ) THEN
+
+		   Call CmdParse()
+		   Call CmdExecute()
+		End If
+	WEND
+End Sub

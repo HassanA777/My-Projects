@@ -1,0 +1,25 @@
+#include "globals.h"
+#include "CmdUtil.pcs"
+'!TITLE "Denso robot program"
+
+Sub Main
+
+	'This program monitors the systate variable
+	'and executes a clrerr when the door interlock is opened
+	'Looking for robot failure (bit 2) and robot warning (bit 8)
+	TowerLight_BlinkingTimer = Timer
+	WHILE TRUE
+		I99 = sysstate
+'		IF ((I99 AND SYSSTATE_WARNING_OR_ERROR) And ((Sysstate And 2048) = 2048)) then
+		IF (sysstate AND SYSSTATE_WARNING_OR_ERROR) THEN
+		    If (Enable_Error_Display == 0) Then
+				CLRERR
+			End If
+		END IF
+		'2048 (binary&B1000,0000,0000)
+		IF ((Status(TSR1) <> TaskStatus_Running) And ((Sysstate And 2048) = 2048)) THEN
+    		RUN TSR1 ' Command Interface
+  		END IF
+	WEND
+
+End Sub
