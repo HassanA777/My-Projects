@@ -1,0 +1,45 @@
+{
+    "sensors": [
+      {
+        "adc": 0,
+        "channel": 0,
+        "threshold": 100,
+        "topic": "sensors/sensor1",
+        "message": "Sensor 1 value is above threshold",
+        "status": "active",
+        "value": 0,
+        "sensor_type": "t"
+      },
+      {
+        "adc": 1,
+        "channel": 1,
+        "threshold": 100,
+        "topic": "sensors/sensor2",
+        "message": "Sensor 2 value is above threshold",
+        "status": "active",
+        "value": 0,
+        "sensor_type": "h"
+      },
+      {
+        "adc": 2,
+        "channel": 2,
+        "threshold": 100,
+        "topic": "sensors/sensor3",
+        "message": "Sensor 3 value is above threshold",
+        "status": "inactive",
+        "value": 0,
+        "sensor_type": "t"
+      },
+      {
+        "adc": 3,
+        "channel": 3,
+        "threshold": 100,
+        "topic": "sensors/sensor4",
+        "message": "Sensor 4 value is above threshold",
+        "status": "active",
+        "value": 0,
+        "sensor_type": "h"
+      }
+    ]
+  }
+  
