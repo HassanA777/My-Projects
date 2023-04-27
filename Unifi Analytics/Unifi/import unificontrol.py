@@ -15,7 +15,7 @@ keep_col_index_master = data.columns.get_loc("site_id")
 data.drop(data.columns[:keep_col_index_master],axis = 1, inplace=True)
 
 currentData = pd.DataFrame()
-client = unificontrol.UnifiClient(host='192.168.100.114', port= 8443, username='gsaiunifi_2', password='Handsome20.23', site='default')
+client = unificontrol.UnifiClient(host='xxx', port= 8443, username='xxx', password='xxx', site='default')
 currentData = currentData.append(client.list_clients())
 
 timeNow = datetime.datetime.now()
